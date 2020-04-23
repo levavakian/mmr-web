@@ -2,4 +2,4 @@ build:
   docker:
     web: Dockerfile
 run:
-  web: cd myapp/build ; python3 -m http.server $PORT
+  web: cd server ; gunicorn server:app
