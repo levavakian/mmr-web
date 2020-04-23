@@ -6,9 +6,30 @@ app = Flask(__name__, static_url_path='',
             template_folder='../client/build')
 csp = {
     'default-src': [
+        'unsafe-inline',
         'self',
-        'unsafe-inline'
-    ]
+    ],
+    'media-src': [
+        'unsafe-inline',
+        '*',
+    ],
+    'img-src': [
+        'unsafe-inline',
+        '*',
+    ],
+    'font-src': [
+        'unsafe-inline',
+        '*',
+    ],
+    'style-src': [
+        'unsafe-inline',
+        '*',
+    ],
+    'script-src': [
+        'unsafe-inline',
+        'self'
+    ],
+
 }
 Talisman(app, content_security_policy=csp)
 
