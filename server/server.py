@@ -7,7 +7,7 @@ app = Flask(__name__, static_url_path='',
 csp = {
     'default-src': [
         '\'self\'',
-        '*.herokuapp.com'
+        '*'
     ]
 }
 Talisman(app, content_security_policy=csp)
