@@ -4,13 +4,7 @@ from flask_talisman import Talisman
 app = Flask(__name__, static_url_path='',
             static_folder='../client/build',
             template_folder='../client/build')
-csp = {
-    'default-src': [
-        '\'self\'',
-        '*'
-    ]
-}
-Talisman(app, content_security_policy=csp)
+Talisman(app, content_security_policy_report_only=True)
 
 @app.route("/")
 def entrypoint():
