@@ -6,7 +6,8 @@ app = Flask(__name__, static_url_path='',
             template_folder='../client/build')
 csp = {
     'default-src': [
-        '*'
+        'self',
+        'unsafe-inline'
     ]
 }
 Talisman(app, content_security_policy=csp)
