@@ -27,7 +27,11 @@ csp = {
     ],
     'script-src': [
         'unsafe-inline',
-        'self'
+        '*'
+    ],
+    'manifest-src': [
+        'unsafe-inline',
+        '*'
     ],
 
 }
