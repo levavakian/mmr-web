@@ -6,6 +6,10 @@ app = Flask(__name__, static_url_path='',
             template_folder='../client/build')
 Talisman(app, content_security_policy=None)
 
+params = {
+    
+}
+
 @app.route("/")
 def entrypoint():
     return render_template("index.html")
