@@ -1,11 +1,8 @@
 import React from 'react';
 import './App.css';
 import GoogleLogin from 'react-google-login';
-import SideNav, { NavItem, NavIcon, NavText } from '@trendmicro/react-sidenav';
 import '@trendmicro/react-sidenav/dist/react-sidenav.css';
 import 'font-awesome/css/font-awesome.min.css';
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faSearch, faPlus } from "@fortawesome/free-solid-svg-icons";
 
 const responseGoogle = (response: any) => {
   console.log("pre")
@@ -13,111 +10,10 @@ const responseGoogle = (response: any) => {
   console.log("post")
 }
 
-const clicked = () => {
-  console.log("clicked")
-}
-
 const handleSubmit = (event: any) => {
   if (event.which === 13) {
     event.preventDefault();
     console.log("enter pressed")
-}
-}
-
-const inputForm = (name: string, on: boolean, icon: any) => {
-  if (on) {
-    return (
-      <form>
-        <label>
-          <input type={name} onKeyPress={handleSubmit} style={{ width: "150px", position: "absolute", bottom: "18px", left: "50px"}} name={name} placeholder="some value"/>
-        </label>
-        <FontAwesomeIcon icon={icon} onClick={clicked} style={{ position: "absolute", bottom: "20px", left: "210px"}}/>
-      </form>
-    )
-  } else {
-    return (
-      <div></div>
-    )
-  }
-  
-}
-
-class Sidebar extends React.Component<{}, {expanded: boolean, inputfield: string}> {
-  constructor(props) {
-    super(props);
-    this.state = {
-      expanded: false,
-      inputfield: ""
-    };
-  }
-
-  handleExpand(expanded: boolean) {
-    this.setState({
-      expanded: expanded
-    })
-  }
-
-  handleSelect(selected: string) {
-    console.log(selected)
-  }
-
-  handleSubmit(event) {
-    console.log(event)
-  }
-
-  handleChange(event) {
-    this.setState({inputfield: event.target.value});
-  }
-
-  expand() {
-    this.setState({expanded: true})
-  }
-
-  render() {
-    // var blah = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u"];
-    var blah = ["a", "b", "c"];
-    var rv : any = [];
-    blah.forEach(element => {
-      rv.push(
-        <NavItem eventKey={element} key={element}>
-          <NavIcon>
-              <i className="fa fa-fw fa-angle-double-right" style={{ fontSize: '1.75em' }} />
-          </NavIcon>
-          <NavText>
-              {element}
-          </NavText>
-        </NavItem>
-      )
-    });
-    rv.push(
-      <NavItem eventKey="find" key="find" disabled onClick={() => {this.expand()}}>
-        <NavIcon>
-          <i className="fa fa-fw fa-search" style={{ fontSize: '1.75em' }} />
-        </NavIcon>
-        {inputForm("find", this.state.expanded, faSearch)}
-      </NavItem>
-    )
-    rv.push(
-      <NavItem eventKey="new" key="new" disabled onClick={() => {this.expand()}}>
-        <NavIcon>
-          <i className="fa fa-fw fa-plus" style={{ fontSize: '1.75em' }} />
-        </NavIcon>
-        {inputForm("new", this.state.expanded, faPlus)}
-      </NavItem>
-    )
-    return (
-      <div>
-      <SideNav onSelect={(selected: string) => this.handleSelect(selected)}
-               onToggle={(expanded) => {this.handleExpand(expanded)}}
-               expanded={this.state.expanded}
-      >
-      <SideNav.Toggle />
-      <SideNav.Nav defaultSelected="home">
-      {rv}
-      </SideNav.Nav>
-      </SideNav>
-      </div>
-    );
   }
 }
 
@@ -173,26 +69,86 @@ const createSampleLobby = () => {
   return new Lobby("0000-0000-0000-0000", "Sample Lobby", [...t1, ...t2, ...unteamed], [new Team(t1), new Team(t2)])
 }
 
+function inputForm(inputStr: string, type: string, width: string) {
+  return (
+    <div className="group" style={{maxWidth: width}}>
+      <input type={type} style={{maxWidth: width}} placeholder={inputStr}/>
+      <span className="highlight" style={{maxWidth: width}}></span>
+      <span className="bar" style={{maxWidth: width}}></span>
+    </div>
+  )
+}
+
 function LobbyView(props) {
 
   let teamView = props.lobby.teams.map((elem, idx) => {
       return (
-        <div key={idx} style={{borderRadius: "15px", padding: "10px 20px", border: "2px solid #AAA", margin: "10px 0px"}}>
-          <h3 style={{display: "inline-block", borderRadius: "15px", padding: "10px 20px", border: "2px solid #AAA", margin: "0px 0px", left: "5px"}} key={idx}>Team {idx+1} ({elem.total()})</h3>
-          <p>
-          Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged. It was popularised in the 1960s with the release of Letraset sheets containing Lorem Ipsum passages, and more recently with desktop publishing software like Aldus PageMaker including versions of Lorem Ipsum.
-          </p>
+        <div key={idx} className="card" style={{borderRadius: "10px", padding: "10px 20px", marginBottom: "10px", backgroundColor: "#333"}}>
+          <div className="card" style={{padding: "0px 20px", margin: "8px 0px", left: "5px", backgroundColor: "#282c34", borderRadius: "10px", display: "flex", flexDirection: "row"}}>
+            <h3 style={{}} key={idx}>Team {idx+1} ({elem.total()})</h3>
+            <i className="fa fa-fw fa-close" style={{marginLeft: "auto", paddingTop: "15px", fontSize: '1.75em', color: "#ff9999 " }} />
+          </div>
+          <div style={{display: "flex", flexDirection: "row", flexWrap: "wrap", flexGrow: 1}}>
+            {elem.players.map((p, pidx) => {
+                return (
+                  <div key={pidx} style={{borderRadius: "10px", padding: "5px", marginRight: "5px", marginBottom: "5px", backgroundColor: "#282c34"}}>
+                    <h5 className="cardanim" style={{margin: "2px",}}>{p.name} ({p.elo})</h5>
+                  </div>
+                )
+            })}
+          </div>
         </div>
       )
   })
+
+  let newTeam = (
+    <div className="card" style={{display: "flex", flexDirection: "row", borderRadius: "10px", padding: "10px 20px", marginBottom: "10px", marginRight: "auto", backgroundColor: "#333"}}>
+      <h3 className="card" style={{backgroundColor: "#282c34", borderRadius: "10px", padding: "10px 20px", margin: "8px 0px", left: "5px"}}>New Team</h3>
+      <i className="fa fa-fw fa-plus" style={{marginLeft: "auto", paddingTop: "15px", fontSize: '1.75em', color: "#99ff99 " }} />
+    </div>
+  )
+
+  let playerView = (
+    <div className="card" style={{borderRadius: "10px", padding: "10px 20px", marginBottom: "10px", backgroundColor: "#333"}}>
+      <h3 className="card" style={{backgroundColor: "#282c34", borderRadius: "10px", padding: "10px 20px", margin: "8px 0px", left: "5px"}}>Players</h3>
+      <div style={{display: "flex", flexDirection: "row", flexWrap: "wrap", flexGrow: 1}}>
+        {props.lobby.players.map((p, pidx) => {
+            return (
+              <div key={pidx} style={{borderRadius: "10px", padding: "5px", marginRight: "5px", marginBottom: "5px", backgroundColor: props.lobby.playerActive(p) ? "#337733" : "#282c34"}}>
+                <h5 style={{margin: "2px",}}>{p.name} ({p.elo})</h5>
+              </div>
+            )
+        })}
+      </div>
+    </div>
+  )
+
+  let settingsView = (
+    <div className="card" style={{borderRadius: "10px", padding: "10px 20px", marginBottom: "10px", backgroundColor: "#333"}}>
+      <h3 className="card" style={{backgroundColor: "#282c34", borderRadius: "10px", padding: "10px 20px", margin: "8px 0px", left: "5px"}}>Settings</h3>
+      <div style={{display: "flex", flexDirection: "column", marginTop: "20px"}}>
+        <div style={{display: "flex", flexDirection: "row"}}>
+          {inputForm("Add Player", "text", "150px")}
+          <div style={{marginLeft: "10px", marginRight: "10px"}}></div>
+          {inputForm("Elo", "number", "150px")}
+          <div style={{marginRight: "10px"}}></div>
+          <i className="fa fa-fw fa-plus" style={{ paddingTop: "5px", fontSize: '1.75em', color: "#99ff99 " }} />
+        </div>
+      </div>
+    </div>
+  )
+
   teamView = (
     <div style={{marginBottom: "auto", alignItems: "flex-start"}}>
       {teamView}
+      {newTeam}
+      {playerView}
+      {settingsView}
     </div>
   )
 
 return (
-    <div style={{marginLeft: "25px"}}>
+    <div style={{marginLeft: "25px", marginRight: "2 5%"}}>
       <h1 style={{marginTop: "auto", marginBottom: "0px", paddingTop: "0px"}}>{props.lobby.name}</h1>
       <h6 style={{marginTop: "auto", padding: "0px 25px"}}>id: {props.lobby.id}</h6>
       {teamView}
@@ -223,7 +179,7 @@ class Navigator extends React.Component<{}, {expanded: boolean, selected: string
     }
 
     return <div className="sidebar">
-       <div style={{flexDirection: "row", display: "flex", verticalAlign: "middle"}}>
+       <div style={{flexDirection: "row", display: "flex"}}>
         <i className="fa fa-fw fa-angle-double-right" style={{ fontSize: '1.75em' }} />
         <span style={{textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap"}}className="sidebar-link">Home</span>
        </div>
@@ -283,7 +239,7 @@ function App() {
   return (
     <div className="App-header">
       {getLogin()}
-      <div style={{display: "flex", flexDirection: "row", marginBottom: "auto"}}>
+      <div style={{display: "flex", flexDirection: "row", marginBottom: "auto", marginRight: "auto"}}>
         <Navigator />
         {/* <Sidebar /> */}
         <LobbyView token="0" lobby={lobby} />
