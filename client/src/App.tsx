@@ -1,22 +1,39 @@
 import React from 'react';
 import './App.css';
-import GoogleLogin from 'react-google-login';
+import GoogleLogin, { GoogleLogout } from 'react-google-login';
 import '@trendmicro/react-sidenav/dist/react-sidenav.css';
-import 'font-awesome/css/font-awesome.min.css';
-import { ToastContainer } from 'react-toastify';
+import 'font-awesome/css/font-awesome.css';
+import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-
-const responseGoogle = (response: any) => {
-  console.log("pre")
-  console.log(response)
-  console.log("post")
-}
 
 const handleSubmit = (event: any) => {
   if (event.which === 13) {
     event.preventDefault();
     console.log("enter pressed")
   }
+}
+
+const load = () => {
+
+  let token = ""
+  const stored = localStorage.getItem("tokenInfo")
+  if (stored !== null) {
+    const storedJson = JSON.parse(stored)
+    if (storedJson !== undefined) {
+      token = storedJson.token
+    }
+  }
+
+  let xhr = new XMLHttpRequest()
+  xhr.addEventListener('load', () => {
+    console.log(xhr.responseText)
+  })
+  xhr.open('GET', 'http://localhost:5000/api/load')
+  xhr.setRequestHeader("Authorization", "Bearer " + token);
+  xhr.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
+  xhr.send(JSON.stringify({
+    "some": "stuff"
+  }))
 }
 
 class Player {
@@ -88,13 +105,18 @@ function LobbyView(props) {
         <div key={idx} className="card" style={{borderRadius: "10px", padding: "10px 20px", marginBottom: "10px", backgroundColor: "#333"}}>
           <div className="card" style={{padding: "0px 20px", margin: "8px 0px", left: "5px", backgroundColor: "#282c34", borderRadius: "10px", display: "flex", flexDirection: "row"}}>
             <h3 style={{}} key={idx}>Team {idx+1} ({elem.total()})</h3>
-            <i className="fa fa-fw fa-close" style={{marginLeft: "auto", paddingTop: "15px", fontSize: '1.75em', color: "#ff9999 " }} />
+            <i className="fa fa-fw fa-close lighten" style={{marginLeft: "auto", paddingTop: "15px", fontSize: '1.75em', color: "#ff9999 " }} />
           </div>
           <div style={{display: "flex", flexDirection: "row", flexWrap: "wrap", flexGrow: 1}}>
             {elem.players.map((p, pidx) => {
                 return (
-                  <div key={pidx} style={{borderRadius: "10px", padding: "5px", marginRight: "5px", marginBottom: "5px", backgroundColor: "#282c34"}}>
-                    <h5 className="cardanim" style={{margin: "2px",}}>{p.name} ({p.elo})</h5>
+                  <div key={pidx} className="cardanim" style={{display: "flex", flexDirection: "column", borderRadius: "10px", padding: "5px", marginRight: "5px", marginBottom: "5px", backgroundColor: "#282c34"}}>
+                    <h5  style={{margin: "2px",}}>{p.name} ({p.elo})</h5>
+                    <div style={{display: "flex", flexDirection: "row", maxWidth: "60px"}}>
+                      <i className="fa fa-fw fa-arrow-down lighten" style={{marginRight: "auto", paddingTop: "15px", fontSize: '1em', color: "#555555"}} />
+                      <i className="fa fa-fw fa-arrow-up lighten" style={{marginRight: "auto", paddingTop: "15px", fontSize: '1em', color: "#555555 " }} />
+                      <i className="fa fa-fw fa-close lighten" style={{marginRight: "auto", paddingTop: "15px", fontSize: '1em', color: "#ff9999 " }} />
+                    </div>
                   </div>
                 )
             })}
@@ -106,7 +128,7 @@ function LobbyView(props) {
   let newTeam = (
     <div className="card" style={{display: "flex", flexDirection: "row", borderRadius: "10px", padding: "10px 20px", marginBottom: "10px", marginRight: "auto", backgroundColor: "#333"}}>
       <h3 className="card" style={{backgroundColor: "#282c34", borderRadius: "10px", padding: "10px 20px", margin: "8px 0px", left: "5px"}}>New Team</h3>
-      <i className="fa fa-fw fa-plus" style={{marginLeft: "auto", paddingTop: "15px", paddingRight: "20px", fontSize: '1.75em', color: "#99ff99 " }} />
+      <i className="fa fa-fw fa-plus lighten" style={{marginLeft: "auto", paddingTop: "15px", paddingRight: "20px", fontSize: '1.75em', color: "#99ff99 " }} />
     </div>
   )
 
@@ -116,7 +138,7 @@ function LobbyView(props) {
       <div style={{display: "flex", flexDirection: "row", flexWrap: "wrap", flexGrow: 1}}>
         {props.lobby.players.map((p, pidx) => {
             return (
-              <div key={pidx} style={{borderRadius: "10px", padding: "5px", marginRight: "5px", marginBottom: "5px", marginTop: "5px", backgroundColor: props.lobby.playerActive(p) ? "#337733" : "#282c34"}}>
+              <div className="lighten" key={pidx} style={{borderRadius: "10px", padding: "5px", marginRight: "5px", marginBottom: "5px", marginTop: "5px", backgroundColor: props.lobby.playerActive(p) ? "#337733" : "#282c34"}}>
                 <h5 style={{margin: "2px",}}>{p.name} ({p.elo})</h5>
               </div>
             )
@@ -130,8 +152,8 @@ function LobbyView(props) {
       <span className="card" style={{fontSize: "calc(12px + 1vh)", padding: "5px", backgroundColor: "#282c34", borderRadius: "10px"}}>
         Automatchmake:{' '}
       </span>
-      <span style={{marginTop: "35px"}}>
-        <i className="fa fa-fw fa-download" style={{ fontSize: '1.25em', color: "#99ff99" }} />
+      <span onClick={load} style={{marginTop: "35px"}}>
+        <i className="fa fa-fw fa-download lighten" style={{ fontSize: '1.25em', color: "#99ff99" }} />
       </span>
     </div>
   )
@@ -143,13 +165,13 @@ function LobbyView(props) {
       </span>
       {props.lobby.teams.map((team, idx) => {
           return (
-            <span key={idx} className="cardanim" style={{fontSize: "calc(12px + 1vh)", padding: "5px", backgroundColor: "#282c34", marginLeft: "5px", borderRadius: "10px"}}>
+            <span key={idx} className="cardanim lighten" style={{fontSize: "calc(12px + 1vh)", padding: "5px", backgroundColor: "#282c34", marginLeft: "5px", borderRadius: "10px"}}>
               Team {idx+1}
             </span>
           )
         })}
       <div>
-        <i className="fa fa-fw fa-angle-double-right" style={{fontSize: '1.75em', color: "#99ff99" }} />
+        <i className="fa fa-fw fa-angle-double-right lighten" style={{fontSize: '1.75em', color: "#99ff99" }} />
       </div>
     </div>
   )
@@ -161,8 +183,8 @@ function LobbyView(props) {
         <div style={{marginLeft: "10px", marginRight: "10px"}}></div>
         {inputForm("Elo", "number", "200px")}
         <div style={{marginRight: "20px"}}></div>
-        <i className="fa fa-fw fa-plus" style={{ paddingTop: "5px", fontSize: '1.75em', color: "#99ff99 " }} />
-        <i className="fa fa-fw fa-close" style={{ paddingTop: "5px", fontSize: '1.75em', color: "#ff9999 " }} />
+        <i className="fa fa-fw fa-plus lighten" style={{ paddingTop: "5px", fontSize: '1.75em', color: "#99ff99 " }} />
+        <i className="fa fa-fw fa-close lighten" style={{ paddingTop: "5px", fontSize: '1.75em', color: "#ff9999 " }} />
       </div>
     </div>
   )
@@ -173,7 +195,7 @@ function LobbyView(props) {
         Unfollow:{' '}
       </span>
       <span style={{marginTop: "50px"}}>
-        <i className="fa fa-fw fa-minus-circle" style={{ fontSize: '1.25em', color: "#ff9999" }} />
+        <i className="fa fa-fw fa-minus-circle lighten" style={{ fontSize: '1.25em', color: "#ff9999" }} />
       </span>
     </div>
   )
@@ -181,16 +203,22 @@ function LobbyView(props) {
   let settingsView = (
     <div className="card" style={{borderRadius: "10px", padding: "10px 20px", backgroundColor: "#333"}}>
       <h3 className="card" style={{backgroundColor: "#282c34", borderRadius: "10px", marginBottom: "15px", marginTop: "10px", padding: "10px 20px", left: "5px"}}>Settings</h3>
-      {matchmakeLoad}
-      {selectTeam}
       {playerActions}
       {unfollowView}
     </div>
   )
-  
+
+  let commandView = (
+    <div className="card" style={{borderRadius: "10px", padding: "10px 20px", marginBottom: "10px", backgroundColor: "#333"}}>
+      <h3 className="card" style={{backgroundColor: "#282c34", borderRadius: "10px", marginBottom: "15px", marginTop: "10px", padding: "10px 20px", left: "5px"}}>Commands</h3>
+      {matchmakeLoad}
+      {selectTeam}
+    </div>
+  )
 
   teamView = (
     <div style={{marginBottom: "auto", alignItems: "flex-start"}}>
+      {commandView}
       {teamView}
       {newTeam}
       {playerView}
@@ -210,8 +238,8 @@ return (
 const SidebarIcon = ({handleClick, expanded}) => {
   return <div onClick={handleClick} style={{float: "right"}}>
     {expanded ? 
-     <i className="fa fa-fw fa-close" style={{ fontSize: '1.75em' }} /> :
-     <i className="fa fa-fw fa-bars" style={{ fontSize: '1.75em' }} />}
+     <i className="fa fa-fw fa-close lighten" style={{ fontSize: '1.75em' }} /> :
+     <i className="fa fa-fw fa-bars lighten" style={{ fontSize: '1.75em' }} />}
   </div>
 }
 
@@ -227,7 +255,7 @@ interface NavigatorProps {
 class Navigator extends React.Component<NavigatorProps, NavigatorState> {
   constructor(props) {
     super(props)
-    this.state={
+    this.state = {
       expanded: false,
       selected: -1,
     }
@@ -241,14 +269,14 @@ class Navigator extends React.Component<NavigatorProps, NavigatorState> {
     const search = (
       <div style={{flexDirection: "row", display: "flex"}}>
         <i className="fa fa-fw fa-search" style={{ marginTop: "7px", marginLeft: "7px", marginRight: "7px", fontSize: '1.25em' }} />
-        {inputForm("Search", "text", "123px")}
+        {inputForm("Add by id", "text", "123px")}
       </div>
     )
 
     const addNew = (
       <div style={{flexDirection: "row", display: "flex"}}>
         <i className="fa fa-fw fa-plus" style={{ marginTop: "7px", marginLeft: "7px", marginRight: "7px", fontSize: '1.25em' }} />
-        {inputForm("Add New", "text", "123px")}
+        {inputForm("Add new", "text", "123px")}
       </div>
     )
 
@@ -291,40 +319,99 @@ class Navigator extends React.Component<NavigatorProps, NavigatorState> {
   }
 }
 
-function getLogin() {
-  var login : any
-  if (true) {
-    login = (
-      <div style={{display: "inline-block", position: "absolute", right: "5px", top: "5px", padding: "5px 5px"}}>
-        <GoogleLogin
-                clientId="360927771611-5re4vbbs7ba6envdordshh9fnj31uldf.apps.googleusercontent.com"
-                buttonText="Login"
-                onSuccess={responseGoogle}
-                onFailure={responseGoogle}
-                cookiePolicy={'single_host_origin'}
-        />
-      </div>
-    )
-  } else {
-    login = (
-      <div></div>
-    )
-  }
-  return login
+interface AppState {
+  token?: string;
+  expiration?: number;
+  lobbies: Lobby[]
 }
 
-function App() {
-  const lobbies: Lobby[] = [createSampleLobby()]
-  return (
-    <div className="App-header">
-      <ToastContainer />
-      {getLogin()}
-      <div style={{display: "flex", flexDirection: "row", marginBottom: "auto", marginRight: "auto"}}>
-        <Navigator lobbies={lobbies} />
-        <LobbyView token="0" lobby={lobbies[0]} />
+class App extends React.Component<{}, AppState> {
+  constructor(props) {
+    super(props)
+
+    let state = this.defaultState()
+    const stored = localStorage.getItem("tokenInfo")
+    if (stored !== null) {
+      const storedJson = JSON.parse(stored)
+      if (storedJson !== undefined) {
+        state.token = storedJson.token
+        state.expiration = storedJson.expiration
+      }
+    }
+    this.state = {
+      ...state
+    }
+
+  }
+
+  defaultState = () => {
+    return {
+      token: undefined,
+      expiration: 0,
+      lobbies: [createSampleLobby()],
+    }
+  }
+
+  setState = (state) => {
+    super.setState(state)
+    localStorage.setItem("tokenInfo", JSON.stringify({
+      token: this.state.token,
+      expiration: this.state.expiration,
+    }))
+  }
+
+  handleLogin = (response) => {
+    console.log(response.tokenObj.id_token)
+    this.setState({
+      token: response.tokenObj.id_token,
+      expiration: response.tokenObj.expires_at,
+    })
+    console.log(localStorage.getItem("tokenInfo"))
+  }
+
+  handleLogout = () => {
+    this.setState({
+      token: null,
+      expiration: 0,
+      email: ""
+    })
+  }
+
+  render() {
+    const loggedIn = (this.state.token && this.state.expiration && Date.now() < this.state.expiration)
+    const login =
+      loggedIn ?
+      (
+        <div style={{display: "inline-block", position: "absolute", right: "5px", top: "5px", padding: "5px 5px"}}>
+          <GoogleLogout
+            clientId="360927771611-5re4vbbs7ba6envdordshh9fnj31uldf.apps.googleusercontent.com"
+            buttonText="Logout"
+            onLogoutSuccess={this.handleLogout} />
+        </div>
+      ) : (
+        <div style={{display: "inline-block", position: "absolute", right: "5px", top: "5px", padding: "5px 5px"}}>
+          <GoogleLogin
+            clientId="360927771611-5re4vbbs7ba6envdordshh9fnj31uldf.apps.googleusercontent.com"
+            buttonText="Login"
+            onSuccess={this.handleLogin}
+            onFailure={(event)=>{ console.log(event); toast("Failed to login")}}
+            isSignedIn={true}
+            cookiePolicy={'single_host_origin'}
+          />
+        </div>
+      )
+
+    return (
+      <div className="App-header">
+       <ToastContainer />
+       {login}
+       <div style={{display: "flex", flexDirection: "row", marginBottom: "auto", marginRight: "auto"}}>
+         <Navigator lobbies={this.state.lobbies} />
+         <LobbyView token="0" lobby={this.state.lobbies[0]} />
+       </div>
       </div>
-    </div>
-  );
+    )
+  }
 }
 
 export default App;
