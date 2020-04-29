@@ -10,8 +10,60 @@ CLIENT_ID="360927771611-5re4vbbs7ba6envdordshh9fnj31uldf.apps.googleusercontent.
 app = Flask(__name__, static_url_path='',
             static_folder='../client/build',
             template_folder='../client/build')
-cors = CORS(app, resources={r"/api/*": {"origins": "*"}})
 Talisman(app, content_security_policy=None)
+cors = CORS(app, resources={r"/api/*": {"origins": "*"}})
+
+latest_id = 2
+lobbies = {
+    "lobbies": [
+        {
+            "id": "id1",
+            "name": "Lobby 1",
+            "players": [
+                {
+                    "name": "nameA",
+                    "elo": 500,
+                },
+                {
+                    "name": "nameB",
+                    "elo": 500,
+                },
+                {
+                    "name": "nameC",
+                    "elo": 500,
+                },
+                {
+                    "name": "nameD",
+                    "elo": 500,
+                }
+            ],
+            "created": 1
+        },
+        {
+            "id": "id2",
+            "name": "Lobby 2",
+            "players": [
+                {
+                    "name": "nameA2",
+                    "elo": 500,
+                },
+                {
+                    "name": "nameB2",
+                    "elo": 500,
+                },
+                {
+                    "name": "nameC2",
+                    "elo": 500,
+                },
+                {
+                    "name": "nameD2",
+                    "elo": 500,
+                }
+            ],
+            "created": 2
+        }
+    ]
+}
 
 def require_api_token(func):
     @wraps(func)
@@ -37,6 +89,32 @@ def entrypoint():
 @app.route("/api/load")
 @require_api_token
 def load(user):
-    print (user)
-    print("running load")
-    return jsonify({"a": "hello"})
+    return jsonify(lobbies)
+
+@app.route("/api/add")
+@require_api_token
+def add(user):
+    latest_id = latest_id + 1
+    new = {
+        "id": "id%s" % latest_id,
+        "players": [
+            {
+                "name": "nameA%s" % latest_id,
+                "elo": 500,
+            },
+            {
+                "name": "nameB%s" % latest_id,
+                "elo": 500,
+            },
+            {
+                "name": "nameC%s" % latest_id,
+                "elo": 500,
+            },
+            {
+                "name": "nameD%s" % latest_id,
+                "elo": 500,
+            }
+        ],
+        "created": 2
+    }
+    return jsonify(new)

@@ -6,15 +6,7 @@ import 'font-awesome/css/font-awesome.css';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
-const handleSubmit = (event: any) => {
-  if (event.which === 13) {
-    event.preventDefault();
-    console.log("enter pressed")
-  }
-}
-
-const load = () => {
-
+const api = (action: string, route: string, content: any = undefined, onload: any = undefined) => {
   let token = ""
   const stored = localStorage.getItem("tokenInfo")
   if (stored !== null) {
@@ -25,110 +17,178 @@ const load = () => {
   }
 
   let xhr = new XMLHttpRequest()
-  xhr.addEventListener('load', () => {
-    console.log(xhr.responseText)
-  })
-  xhr.open('GET', 'http://localhost:5000/api/load')
+  xhr.responseType = 'json'
+  if (onload) {
+    xhr.addEventListener('load', onload)
+  }
+  xhr.open(action, "http://localhost:5000/api/" + route)
   xhr.setRequestHeader("Authorization", "Bearer " + token);
   xhr.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
-  xhr.send(JSON.stringify({
-    "some": "stuff"
-  }))
+  if (content) {
+    xhr.send(JSON.stringify({
+      "some": "stuff"
+    }))
+  } else {
+    xhr.send()
+  }
 }
 
 class Player {
   name: string
   elo: number
+  locked: boolean
+  team: number
 
   constructor(name: string, elo: number) {
     this.name = name
     this.elo = elo
-  }
-}
-
-class Team {
-  players: Player[] = []
-  constructor(players: Player[]) {
-    this.players = players
-  }
-
-  total() {
-    return this.players.map((p) => {return p.elo})
-                       .reduce((total, add) => {return total + add})
+    this.locked = false
+    this.team = 0
   }
 }
 
 class Lobby {
-  players: Player[] = []
-  teams: Team[] = []
+  teams: Set<number>
+  chosenTeam: number
   id: string
   name: string
+  players: Map<string, Player>
 
-  constructor(id: string, name: string, players: Player[], teams: Team[]) {
+  playerEditText: string = ""
+  playerEditNum: string = ""
+
+  constructor(id: string, name: string, players: Map<string, Player>) {
     this.players = players
     this.id = id
     this.name = name
-    this.teams = teams
+    this.teams = new Set([1, 2])
+    this.chosenTeam = 0
   }
+}
 
-  playerActive(p: Player) {
-    for (const team of this.teams) {
-      if (team.players.map((pl) => { return pl.name }).includes(p.name)) {
-        return true
-      }
+const getTotalForTeam = (lobby, team) => {
+  const pArr: Array<Player> = Array.from(lobby.players.values())
+  return pArr.reduce((total, player) => {
+    if (player.team === team) {
+      return total + player.elo
+    } else {
+      return total
     }
-    return false
-  } 
+  }, 0)
+}
+
+const deepcopyPlayer = (player: Player) => {
+  return {
+    ...player
+  }
+}
+
+const deepcopyLobby = (lobby: Lobby) => {
+  const pArr: Array<[string, Player]> = Array.from(lobby.players.values()).map((p) => [p.name, deepcopyPlayer(p)])
+  let nlobby = new Lobby(
+    lobby.id,
+    lobby.name,
+    new Map(pArr)
+  )
+
+  const teamArr: Array<number> = Array.from(lobby.teams)
+  nlobby.teams = new Set(teamArr)
+  nlobby.chosenTeam = lobby.chosenTeam
+  nlobby.playerEditNum = lobby.playerEditNum
+  nlobby.playerEditText = lobby.playerEditText
+  return nlobby
+}
+
+const deepcopyLobbies = (lobbies: Map<string, Lobby>) => {
+  const lArr: Array<[string, Lobby]> = Array.from(lobbies).map((l) => [l[1].id, deepcopyLobby(l[1])])
+  return new Map(lArr)
 }
 
 const createSampleLobby = () => {
-  let t1 = [new Player("Bibimbap", 500), new Player("Jormey", 300), new Player("Bon", 600)]
-  let t2 = [new Player("Corl", 5), new Player("Potato", 200), new Player("Albo", 750)]
-  let unteamed = [new Player("Josus", 260), new Player("Grop", 320)]
-  return new Lobby("0000-0000-0000-0000", "Sample Lobby", [...t1, ...t2, ...unteamed], [new Team(t1), new Team(t2)])
+  let t1 = new Map([
+    ["Bibimbap", new Player("Bibimbap", 500)],
+    ["Jormey", new Player("Jormey", 300)],
+    ["Bon", new Player("Bon", 600)]
+  ])
+  let t2 = new Map([
+    ["Corl", new Player("Corl", 5)],
+    ["Potato", new Player("Potato", 200)],
+    ["Albo", new Player("Albo", 750)]
+  ])
+  let unteamed = new Map([
+    ["Josus", new Player("Josus", 260)],
+    ["Grop", new Player("Grop", 320)]
+  ])
+  return new Lobby("0000-0000-0000-0000", "Sample Lobby", new Map([...t1, ...t2, ...unteamed]))
 }
 
-function inputForm(inputStr: string, type: string, width: string) {
+function inputForm(inputStr: string, type: string, content: string | number, width: string, onChange: any, onKey: any) {
   return (
     <div className="group" style={{marginBottom: "10px", maxWidth: width}}>
-      <input type={type} style={{maxWidth: width}} placeholder={inputStr}/>
+      <input type={type} onKeyPress={onKey} onChange={onChange} value={content} style={{maxWidth: width}} placeholder={inputStr}/>
       <span className="highlight" style={{maxWidth: width}}></span>
       <span className="bar" style={{maxWidth: width}}></span>
     </div>
   )
 }
 
-function LobbyView(props) {
+interface PlayerEditState {
+  textInput: string 
+  numInput: string
+}
 
-  let teamView = props.lobby.teams.map((elem, idx) => {
+interface PlayerEditProps {
+  lobby: Lobby
+}
+
+function LobbyView(props) {
+  if (props.lobby === undefined) {
+    return (
+      <div style={{marginLeft: "25px", marginRight: "auto"}}>
+        <h1 style={{marginTop: "auto", marginBottom: "0px", paddingTop: "0px"}}>No lobby selected</h1>
+        <h6 style={{marginTop: "auto", padding: "0px 25px"}}>Please create a new lobby or add an existing one</h6>
+      </div>
+    )
+  }
+  const teamsArr: Array<number> = Array.from(props.lobby.teams)
+
+  const teamElems = teamsArr.map((t) => {
+    const pArr: Array<Player> = Array.from(props.lobby.players.values())
+    const playersForTeam = pArr.filter((p) => p.team === t)
+    const teamTotal = getTotalForTeam(props.lobby, t)
+    const playerElems = playersForTeam.map((p, pidx) => {
       return (
-        <div key={idx} className="card" style={{borderRadius: "10px", padding: "10px 20px", marginBottom: "10px", backgroundColor: "#333"}}>
-          <div className="card" style={{padding: "0px 20px", margin: "8px 0px", left: "5px", backgroundColor: "#282c34", borderRadius: "10px", display: "flex", flexDirection: "row"}}>
-            <h3 style={{}} key={idx}>Team {idx+1} ({elem.total()})</h3>
-            <i className="fa fa-fw fa-close lighten" style={{marginLeft: "auto", paddingTop: "15px", fontSize: '1.75em', color: "#ff9999 " }} />
-          </div>
-          <div style={{display: "flex", flexDirection: "row", flexWrap: "wrap", flexGrow: 1}}>
-            {elem.players.map((p, pidx) => {
-                return (
-                  <div key={pidx} className="cardanim" style={{display: "flex", flexDirection: "column", borderRadius: "10px", padding: "5px", marginRight: "5px", marginBottom: "5px", backgroundColor: "#282c34"}}>
-                    <h5  style={{margin: "2px",}}>{p.name} ({p.elo})</h5>
-                    <div style={{display: "flex", flexDirection: "row", maxWidth: "60px"}}>
-                      <i className="fa fa-fw fa-arrow-down lighten" style={{marginRight: "auto", paddingTop: "15px", fontSize: '1em', color: "#555555"}} />
-                      <i className="fa fa-fw fa-arrow-up lighten" style={{marginRight: "auto", paddingTop: "15px", fontSize: '1em', color: "#555555 " }} />
-                      <i className="fa fa-fw fa-close lighten" style={{marginRight: "auto", paddingTop: "15px", fontSize: '1em', color: "#ff9999 " }} />
-                    </div>
-                  </div>
-                )
-            })}
+        <div key={pidx} className="cardanim" style={{display: "flex", flexDirection: "column", borderRadius: "10px", padding: "5px", marginRight: "5px", marginBottom: "5px", backgroundColor: "#282c34"}}>
+          <h5  style={{margin: "2px"}}>{p.name} ({p.elo})</h5>
+          <div style={{display: "flex", flexDirection: "row", maxWidth: "80px"}}>
+            <i className="fa fa-fw fa-arrow-down lighten" style={{paddingRight: "3px", paddingTop: "15px", fontSize: '1em', color: "#555555"}} />
+            <i className="fa fa-fw fa-arrow-up lighten" style={{paddingRight: "3px", paddingTop: "15px", fontSize: '1em', color: "#555555" }} />
+            <i className="fa fa-fw fa-lock lighten" style={{paddingRight: "3px", paddingTop: "15px", fontSize: '1em', color: p.locked ? "#ff9999" : "#555555" }} />
+            <i className="fa fa-fw fa-close lighten" style={{paddingRight: "3px", paddingTop: "15px", fontSize: '1em', color: "#ff9999 " }} />
           </div>
         </div>
       )
+    })
+
+    return (
+      <div key={t} className="card" style={{borderRadius: "10px", padding: "10px 20px", marginBottom: "10px", backgroundColor: "#333"}}>
+        <div className="card" style={{padding: "0px 20px", margin: "8px 0px", left: "5px", backgroundColor: "#282c34", borderRadius: "10px", display: "flex", flexDirection: "row"}}>
+          <h3 style={{}} key={t}>Team {t} ({teamTotal})</h3>
+          {t > 2 ?
+            <i className="fa fa-fw fa-close lighten" onClick={() => {props.onDeleteTeam(props.lobby, t)}} style={{marginLeft: "auto", paddingTop: "15px", fontSize: '1.75em', color: "#ff9999 " }} /> :
+            null}
+        </div>
+        <div style={{display: "flex", flexDirection: "row", flexWrap: "wrap", flexGrow: 1}}>
+          {playerElems}
+        </div>
+      </div>
+    )
   })
 
   let newTeam = (
     <div className="card" style={{display: "flex", flexDirection: "row", borderRadius: "10px", padding: "10px 20px", marginBottom: "10px", marginRight: "auto", backgroundColor: "#333"}}>
       <h3 className="card" style={{backgroundColor: "#282c34", borderRadius: "10px", padding: "10px 20px", margin: "8px 0px", left: "5px"}}>New Team</h3>
-      <i className="fa fa-fw fa-plus lighten" style={{marginLeft: "auto", paddingTop: "15px", paddingRight: "20px", fontSize: '1.75em', color: "#99ff99 " }} />
+      <i className="fa fa-fw fa-plus lighten" onClick={() => {props.onNewTeam(props.lobby)}} style={{marginLeft: "auto", paddingTop: "15px", paddingRight: "20px", fontSize: '1.75em', color: "#99ff99 " }} />
     </div>
   )
 
@@ -136,10 +196,10 @@ function LobbyView(props) {
     <div className="card" style={{borderRadius: "10px", padding: "10px 20px", marginBottom: "10px", backgroundColor: "#333"}}>
       <h3 className="card" style={{backgroundColor: "#282c34", borderRadius: "10px", padding: "10px 20px", margin: "8px 0px", left: "5px"}}>Players</h3>
       <div style={{display: "flex", flexDirection: "row", flexWrap: "wrap", flexGrow: 1}}>
-        {props.lobby.players.map((p, pidx) => {
+        {[...props.lobby.players.values()].map((p, pidx) => {
             return (
-              <div className="lighten" key={pidx} style={{borderRadius: "10px", padding: "5px", marginRight: "5px", marginBottom: "5px", marginTop: "5px", backgroundColor: props.lobby.playerActive(p) ? "#337733" : "#282c34"}}>
-                <h5 style={{margin: "2px",}}>{p.name} ({p.elo})</h5>
+              <div className="lighten" key={pidx} style={{borderRadius: "10px", padding: "5px", marginRight: "5px", marginBottom: "5px", marginTop: "5px", backgroundColor: props.lobby.teams.has(p.team) ? "#337733" : "#282c34"}}>
+                <h5 onClick={() => props.onPlayerToggle(props.lobby, p.name)} style={{margin: "2px",}}>{p.name} ({p.elo})</h5>
               </div>
             )
         })}
@@ -152,7 +212,7 @@ function LobbyView(props) {
       <span className="card" style={{fontSize: "calc(12px + 1vh)", padding: "5px", backgroundColor: "#282c34", borderRadius: "10px"}}>
         Automatchmake:{' '}
       </span>
-      <span onClick={load} style={{marginTop: "35px"}}>
+      <span style={{marginTop: "35px"}}>
         <i className="fa fa-fw fa-download lighten" style={{ fontSize: '1.25em', color: "#99ff99" }} />
       </span>
     </div>
@@ -163,28 +223,16 @@ function LobbyView(props) {
       <span className="card" style={{fontSize: "calc(12px + 1vh)", padding: "5px", backgroundColor: "#282c34", borderRadius: "10px"}}>
         Select winning team:{' '} 
       </span>
-      {props.lobby.teams.map((team, idx) => {
+      {teamsArr.map((tidx) => {
+          const backgroundColor = props.lobby.chosenTeam === tidx ? "#337733" : "#282c34"
           return (
-            <span key={idx} className="cardanim lighten" style={{fontSize: "calc(12px + 1vh)", padding: "5px", backgroundColor: "#282c34", marginLeft: "5px", borderRadius: "10px"}}>
-              Team {idx+1}
+            <span key={tidx} onClick={() => {props.onSelectTeam(props.lobby, tidx)}} className="cardanim lighten" style={{fontSize: "calc(12px + 1vh)", padding: "5px", backgroundColor: backgroundColor, marginLeft: "5px", borderRadius: "10px"}}>
+              Team {tidx}
             </span>
           )
         })}
       <div>
         <i className="fa fa-fw fa-angle-double-right lighten" style={{fontSize: '1.75em', color: "#99ff99" }} />
-      </div>
-    </div>
-  )
-
-  let playerActions = (
-    <div style={{display: "flex", flexDirection: "column", marginTop: "20px"}}>
-      <div style={{display: "flex", flexDirection: "row"}}>
-        {inputForm("Add/Remove Player", "text", "200px")}
-        <div style={{marginLeft: "10px", marginRight: "10px"}}></div>
-        {inputForm("Elo", "number", "200px")}
-        <div style={{marginRight: "20px"}}></div>
-        <i className="fa fa-fw fa-plus lighten" style={{ paddingTop: "5px", fontSize: '1.75em', color: "#99ff99 " }} />
-        <i className="fa fa-fw fa-close lighten" style={{ paddingTop: "5px", fontSize: '1.75em', color: "#ff9999 " }} />
       </div>
     </div>
   )
@@ -197,6 +245,19 @@ function LobbyView(props) {
       <span style={{marginTop: "50px"}}>
         <i className="fa fa-fw fa-minus-circle lighten" style={{ fontSize: '1.25em', color: "#ff9999" }} />
       </span>
+    </div>
+  )
+
+  let playerActions = (
+    <div style={{display: "flex", flexDirection: "column", marginTop: "20px"}}>
+      <div style={{display: "flex", flexDirection: "row"}}>
+        {inputForm("Add/Remove Player", "text", props.lobby.playerEditText, "200px", (e) => props.onPlayerEditTextChange(props.lobby, e), null)}
+        <div style={{marginLeft: "10px", marginRight: "10px"}}></div>
+        {inputForm("Elo", "number", props.lobby.playerEditNum, "200px", (e) => props.onPlayerEditNumChange(props.lobby, e), null)}
+        <div style={{marginRight: "20px"}}></div>
+        <i onClick={() => props.onPlayerEditAdd(props.lobby)} className="fa fa-fw fa-plus lighten" style={{ paddingTop: "5px", fontSize: '1.75em', color: "#99ff99 " }} />
+        <i onClick={() => props.onPlayerEditRemove(props.lobby)} className="fa fa-fw fa-close lighten" style={{ paddingTop: "5px", fontSize: '1.75em', color: "#ff9999 " }} />
+      </div>
     </div>
   )
 
@@ -216,10 +277,10 @@ function LobbyView(props) {
     </div>
   )
 
-  teamView = (
+  const teamView = (
     <div style={{marginBottom: "auto", alignItems: "flex-start"}}>
       {commandView}
-      {teamView}
+      {teamElems}
       {newTeam}
       {playerView}
       {settingsView}
@@ -245,11 +306,14 @@ const SidebarIcon = ({handleClick, expanded}) => {
 
 interface NavigatorState {
   expanded: boolean;
-  selected: number;
+  searchVal: string,
+  addVal: string,
 }
 
 interface NavigatorProps {
-  lobbies: Lobby[];
+  lobbies: Map<string, Lobby>;
+  selected?: Lobby;
+  onSelectLobby: any;
 }
 
 class Navigator extends React.Component<NavigatorProps, NavigatorState> {
@@ -257,11 +321,52 @@ class Navigator extends React.Component<NavigatorProps, NavigatorState> {
     super(props)
     this.state = {
       expanded: false,
-      selected: -1,
+      searchVal: "",
+      addVal: "",
     }
   }
 
-  sidebar = () => {
+  onSearchChange = (e) => {
+    const val = e.target.value
+    this.setState({
+      searchVal: val
+    })
+  }
+
+  onSearchSubmit = (e) => {
+    if (e.which === 13) {
+      e.preventDefault();
+      this.onSearchClick()
+    }
+  }
+
+  onSearchClick = () => {
+    this.setState({
+      searchVal: ""
+    })
+  }
+
+  onAddChange = (e) => {
+    const val = e.target.value
+    this.setState({
+      addVal: val
+    })
+  }
+
+  onAddSubmit = (e) => {
+    if (e.which === 13) {
+      e.preventDefault();
+      this.onAddClick()
+    }
+  }
+
+  onAddClick = () => {
+    this.setState({
+      addVal: ""
+    })
+  }
+
+  sidebar = (props) => {
     if (!this.state.expanded) {
       return null
     }
@@ -269,23 +374,23 @@ class Navigator extends React.Component<NavigatorProps, NavigatorState> {
     const search = (
       <div style={{flexDirection: "row", display: "flex"}}>
         <i className="fa fa-fw fa-search" style={{ marginTop: "7px", marginLeft: "7px", marginRight: "7px", fontSize: '1.25em' }} />
-        {inputForm("Add by id", "text", "123px")}
+        {inputForm("Add by id", "text", this.state.searchVal, "123px", this.onSearchChange, this.onSearchSubmit)}
       </div>
     )
 
     const addNew = (
       <div style={{flexDirection: "row", display: "flex"}}>
         <i className="fa fa-fw fa-plus" style={{ marginTop: "7px", marginLeft: "7px", marginRight: "7px", fontSize: '1.25em' }} />
-        {inputForm("Add new", "text", "123px")}
+        {inputForm("Add new", "text", this.state.addVal, "123px", this.onAddChange, this.onAddSubmit)}
       </div>
     )
 
     return <div className="sidebar">
-       {this.props.lobbies.map((elem, idx) => {
+       {[...this.props.lobbies.values()].map((elem, idx) => {
          return (
           <div key={elem.name} style={{flexDirection: "row", display: "flex", marginBottom: "10px"}}>
             <i className="fa fa-fw fa-angle-double-right" style={{ fontSize: '1.75em' }} />
-            <span style={{textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap"}}className="sidebar-link">{elem.name}</span>
+            <span onClick={() => props.onSelectLobby(elem)} style={{textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap"}}className="sidebar-link">{elem.name}</span>
           </div>
          )
        })}
@@ -313,7 +418,7 @@ class Navigator extends React.Component<NavigatorProps, NavigatorState> {
           handleClick={this.toggle}
         />
         <div style={{paddingBottom: "10px"}}></div>
-        {this.sidebar()}
+        {this.sidebar(this.props)}
       </div>
     </div>
   }
@@ -322,7 +427,8 @@ class Navigator extends React.Component<NavigatorProps, NavigatorState> {
 interface AppState {
   token?: string;
   expiration?: number;
-  lobbies: Lobby[]
+  lobbies: Map<string, Lobby>;
+  selectedLobby: string;
 }
 
 class App extends React.Component<{}, AppState> {
@@ -341,14 +447,82 @@ class App extends React.Component<{}, AppState> {
     this.state = {
       ...state
     }
+  }
 
+  componentDidMount = () => {
+    if (this.state.token) {
+      const load = async () => { this.setFromLoad() }
+      load()
+    }
+  }
+
+  onPlayerEditTextChange = (lobby, event) => {
+    const val = event.target.value
+    this.setState((prevState) => {
+      let nlobbies = deepcopyLobbies(prevState.lobbies)
+      let nlobby = nlobbies.get(lobby.id)
+      if (!nlobby) {
+        return {}
+      }
+      nlobby.playerEditText = val
+      return {
+        lobbies: nlobbies
+      }
+    })
+  }
+
+  onPlayerEditNumChange = (lobby, event) => {
+    const val = event.target.value
+    this.setState((prevState) => {
+      let nlobbies = deepcopyLobbies(prevState.lobbies)
+      let nlobby = nlobbies.get(lobby.id)
+      if (!nlobby) {
+        return {}
+      }
+      nlobby.playerEditNum = val
+      return {
+        lobbies: nlobbies
+      }
+    })
+  }
+
+  onPlayerEditAdd = (lobby) => {
+    this.setState((prevState) => {
+      let nlobbies = deepcopyLobbies(prevState.lobbies)
+      let nlobby = nlobbies.get(lobby.id)
+      if (!nlobby) {
+        return {}
+      }
+      nlobby.playerEditNum = ""
+      nlobby.playerEditText = ""
+      return {
+        lobbies: nlobbies
+      }
+    })
+  }
+
+  onPlayerEditRemove = (lobby) => {
+    this.setState((prevState) => {
+      let nlobbies = deepcopyLobbies(prevState.lobbies)
+      let nlobby = nlobbies.get(lobby.id)
+      if (!nlobby) {
+        return {}
+      }
+      nlobby.playerEditNum = ""
+      nlobby.playerEditText = ""
+      return {
+        lobbies: nlobbies
+      }
+    })
   }
 
   defaultState = () => {
+    const sample = createSampleLobby()
     return {
       token: undefined,
       expiration: 0,
-      lobbies: [createSampleLobby()],
+      lobbies: new Map([[sample.id, sample]]),
+      selectedLobby: sample.id,
     }
   }
 
@@ -360,20 +534,158 @@ class App extends React.Component<{}, AppState> {
     }))
   }
 
+  getCurrentLobby = () => {
+    for (const lobby of this.state.lobbies.values()) {
+      if (lobby.id === this.state.selectedLobby) {
+        return lobby
+      }
+    }
+    return undefined
+  }
+
   handleLogin = (response) => {
-    console.log(response.tokenObj.id_token)
     this.setState({
       token: response.tokenObj.id_token,
       expiration: response.tokenObj.expires_at,
     })
-    console.log(localStorage.getItem("tokenInfo"))
+    this.setFromLoad()
+  }
+
+  newLobbyFromExisting = (jlobby, elobby) => {
+    let players = jlobby.players.map((p) => {
+      let player = new Player(p.name, p.elo)
+      if (elobby) {
+        const existing = elobby.players.get(p.name)
+        if (!existing)
+        {
+          return player
+        }
+        player.locked = existing.locked
+        player.team = existing.team
+      }
+      return player
+    })
+    let lobby = new Lobby(jlobby.id, jlobby.name, players)
+    if (elobby) {
+      lobby.teams = elobby.teams
+      lobby.playerEditNum = elobby.playerEditNum
+      lobby.playerEditText = elobby.playerEditText
+      lobby.chosenTeam = elobby.chosenTeam
+    }
+    return lobby
+  }
+
+  setFromLoad = () => {
+    api('GET', 'load', undefined, (e) => {
+      if (e.target.status !== 200) {
+        toast("failed to load lobbies")
+        return
+      }
+      this.setState((prevState) => {
+        const resp = e.target.response
+        const lobbies = resp.lobbies.map((jlobby) => {
+          const elobby = prevState.lobbies.get(jlobby.id);
+          return this.newLobbyFromExisting(jlobby, elobby ? deepcopyLobby(elobby) : undefined)
+        })
+        let lobbiesMap = new Map<string, Lobby>()
+        lobbies.map((elem) => lobbiesMap.set(elem.id, elem))
+        let selected = prevState.selectedLobby
+        if (!lobbiesMap.has(prevState.selectedLobby) && lobbies.length > 0) {
+          selected = lobbies[0].id
+        }
+        return {
+          selectedLobby: selected,
+          lobbies: lobbiesMap,
+        }
+      })
+    })
   }
 
   handleLogout = () => {
+    this.setState(
+      this.defaultState()
+    )
+  }
+
+  onNewTeam = (lobby) => {
+    this.setState((prevState) => {
+      let nlobbies = deepcopyLobbies(prevState.lobbies)
+      let nlobby = nlobbies.get(lobby.id)
+      if (!nlobby) {
+        return {}
+      }
+      const nIdx = Math.max(...nlobby?.teams) + 1
+      nlobby.teams.add(nIdx)
+      return {
+        lobbies: nlobbies
+      }
+    })
+  }
+
+  onPlayerToggle = (lobby, player) => {
+    this.setState((prevState) => {
+      let nlobbies = deepcopyLobbies(prevState.lobbies)
+      let nlobby = nlobbies.get(lobby.id)
+      if (!nlobby) {
+        return {}
+      }
+      let nplayer = nlobby.players.get(player)
+      if (!nplayer) {
+        return {}
+      }
+
+      let nTeam = 0
+      if (!nlobby.teams.has(nplayer.team)) {
+        nTeam = 1
+        let min = getTotalForTeam(nlobby, 1)
+        for (const team of Array.from(nlobby.teams)) {
+          const tot = getTotalForTeam(nlobby, team)
+          if (tot < min) {
+            nTeam = team
+            min = tot
+          }
+        }
+      }
+
+      nplayer.team = nTeam
+      return {
+        lobbies: nlobbies
+      }
+    })
+  }
+
+  onDeleteTeam = (lobby, team) => {
+    this.setState((prevState) => {
+      let nlobbies = deepcopyLobbies(prevState.lobbies)
+      let nlobby = nlobbies.get(lobby.id)
+      if (!nlobby) {
+        return {}
+      }
+      nlobby.teams.delete(team)
+      return {
+        lobbies: nlobbies
+      }
+    })
+  }
+
+  onSelectTeam = (lobby, team) => {
+    this.setState((prevState) => {
+      let nlobbies = deepcopyLobbies(prevState.lobbies)
+      let nlobby = nlobbies.get(lobby.id)
+      if (!nlobby) {
+        return {}
+      }
+      nlobby.chosenTeam = team
+      return {
+        lobbies: nlobbies
+      }
+    })
+  }
+
+  onSelectLobby = (lobby) => {
+    console.log("hello", lobby.id, lobby.name)
     this.setState({
-      token: null,
-      expiration: 0,
-      email: ""
+      selectedLobby: lobby.id
     })
   }
 
@@ -394,20 +706,34 @@ class App extends React.Component<{}, AppState> {
             clientId="360927771611-5re4vbbs7ba6envdordshh9fnj31uldf.apps.googleusercontent.com"
             buttonText="Login"
             onSuccess={this.handleLogin}
-            onFailure={(event)=>{ console.log(event); toast("Failed to login")}}
+            onFailure={(event)=>{ toast("Failed to login")}}
             isSignedIn={true}
             cookiePolicy={'single_host_origin'}
           />
         </div>
       )
+    
+    const currentLobby = this.getCurrentLobby()
 
     return (
       <div className="App-header">
        <ToastContainer />
        {login}
        <div style={{display: "flex", flexDirection: "row", marginBottom: "auto", marginRight: "auto"}}>
-         <Navigator lobbies={this.state.lobbies} />
-         <LobbyView token="0" lobby={this.state.lobbies[0]} />
+         <Navigator
+           lobbies={this.state.lobbies}
+           selected={currentLobby}
+           onSelectLobby={this.onSelectLobby} />
+         <LobbyView
+            lobby={currentLobby}
+            onNewTeam={this.onNewTeam}
+            onPlayerToggle={this.onPlayerToggle}
+            onSelectTeam={this.onSelectTeam}
+            onPlayerEditAdd={this.onPlayerEditAdd}
+            onPlayerEditRemove={this.onPlayerEditRemove}
+            onPlayerEditTextChange={this.onPlayerEditTextChange}
+            onPlayerEditNumChange={this.onPlayerEditNumChange}
+            onDeleteTeam={this.onDeleteTeam} />
        </div>
       </div>
     )
