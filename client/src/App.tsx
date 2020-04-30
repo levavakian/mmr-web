@@ -21,13 +21,14 @@ const api = (action: string, route: string, content: any = undefined, onload: an
   if (onload) {
     xhr.addEventListener('load', onload)
   }
+  xhr.addEventListener('error', () => toast("there was an error with the request"))
   xhr.open(action, "http://localhost:5000/api/" + route)
   xhr.setRequestHeader("Authorization", "Bearer " + token);
   xhr.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
   if (content) {
-    xhr.send(JSON.stringify({
-      "some": "stuff"
-    }))
+    xhr.send(JSON.stringify(
+      content
+    ))
   } else {
     xhr.send()
   }
@@ -49,11 +50,11 @@ class Player {
 
 class Lobby {
   teams: Set<number>
-  chosenTeam: number
+  chosenTeam: number = 0
   id: string
   name: string
   players: Map<string, Player>
-
+  enforceEvenTeams: boolean = false
   playerEditText: string = ""
   playerEditNum: string = ""
 
@@ -62,7 +63,6 @@ class Lobby {
     this.id = id
     this.name = name
     this.teams = new Set([1, 2])
-    this.chosenTeam = 0
   }
 }
 
@@ -96,6 +96,7 @@ const deepcopyLobby = (lobby: Lobby) => {
   nlobby.chosenTeam = lobby.chosenTeam
   nlobby.playerEditNum = lobby.playerEditNum
   nlobby.playerEditText = lobby.playerEditText
+  nlobby.enforceEvenTeams = lobby.enforceEvenTeams
   return nlobby
 }
 
@@ -119,7 +120,7 @@ const createSampleLobby = () => {
     ["Josus", new Player("Josus", 260)],
     ["Grop", new Player("Grop", 320)]
   ])
-  return new Lobby("0000-0000-0000-0000", "Sample Lobby", new Map([...t1, ...t2, ...unteamed]))
+  return new Lobby("0000-0000-0000-0000", "Sample Lobby (Login to Edit)", new Map([...t1, ...t2, ...unteamed]))
 }
 
 function inputForm(inputStr: string, type: string, content: string | number, width: string, onChange: any, onKey: any) {
@@ -161,10 +162,10 @@ function LobbyView(props) {
         <div key={pidx} className="cardanim" style={{display: "flex", flexDirection: "column", borderRadius: "10px", padding: "5px", marginRight: "5px", marginBottom: "5px", backgroundColor: "#282c34"}}>
           <h5  style={{margin: "2px"}}>{p.name} ({p.elo})</h5>
           <div style={{display: "flex", flexDirection: "row", maxWidth: "80px"}}>
-            <i className="fa fa-fw fa-arrow-down lighten" style={{paddingRight: "3px", paddingTop: "15px", fontSize: '1em', color: "#555555"}} />
-            <i className="fa fa-fw fa-arrow-up lighten" style={{paddingRight: "3px", paddingTop: "15px", fontSize: '1em', color: "#555555" }} />
-            <i className="fa fa-fw fa-lock lighten" style={{paddingRight: "3px", paddingTop: "15px", fontSize: '1em', color: p.locked ? "#ff9999" : "#555555" }} />
-            <i className="fa fa-fw fa-close lighten" style={{paddingRight: "3px", paddingTop: "15px", fontSize: '1em', color: "#ff9999 " }} />
+            <i onClick={() => props.onPlayerLower(props.lobby, p.name)} className="fa fa-fw fa-arrow-down lighten" style={{paddingRight: "3px", paddingTop: "15px", fontSize: '1em', color: "#555555"}} />
+            <i onClick={() => props.onPlayerRaise(props.lobby, p.name)} className="fa fa-fw fa-arrow-up lighten" style={{paddingRight: "3px", paddingTop: "15px", fontSize: '1em', color: "#555555" }} />
+            <i onClick={() => props.onPlayerLockToggle(props.lobby, p.name)} className="fa fa-fw fa-lock lighten" style={{paddingRight: "3px", paddingTop: "15px", fontSize: '1em', color: p.locked ? "#ff9999" : "#555555" }} />
+            <i onClick={() => props.onPlayerToggle(props.lobby, p.name)} className="fa fa-fw fa-close lighten" style={{paddingRight: "3px", paddingTop: "15px", fontSize: '1em', color: "#ff9999 " }} />
           </div>
         </div>
       )
@@ -210,10 +211,48 @@ function LobbyView(props) {
   let matchmakeLoad = (
     <div style={{marginBottom: "15px"}}>
       <span className="card" style={{fontSize: "calc(12px + 1vh)", padding: "5px", backgroundColor: "#282c34", borderRadius: "10px"}}>
-        Automatchmake:{' '}
+        Matchmake:{' '}
       </span>
       <span style={{marginTop: "35px"}}>
-        <i className="fa fa-fw fa-download lighten" style={{ fontSize: '1.25em', color: "#99ff99" }} />
+        <i onClick={() => props.matchmake(props.lobby)} className="fa fa-fw fa-download lighten" style={{ fontSize: '1.25em', color: "#99ff99" }} />
+      </span>
+    </div>
+  )
+
+  const copyTeamComp = () => {
+    let out = ""
+    const pArr: Array<Player> = Array.from(props.lobby.players.values())
+    for (const t of props.lobby.teams) {
+      const playersForTeam = pArr.filter((p) => p.team === t)
+      const totElo = playersForTeam.map((p) => p.elo).reduce((tot, add) => tot + add, 0)
+      out = out + "Team " + t + "(" + totElo + ")\n"
+      for (let p of playersForTeam) {
+        out = out + "  " + p.name + " (" + p.elo + ")\n"
+      }
+    }
+    navigator.clipboard.writeText(out)
+    toast("copied")
+  }
+  let teamCompCopy = (
+    <div style={{marginBottom: "15px"}}>
+      <span className="card" style={{fontSize: "calc(12px + 1vh)", padding: "5px", backgroundColor: "#282c34", borderRadius: "10px"}}>
+        Copy team composition:{' '}
+      </span>
+      <span style={{marginTop: "35px"}}>
+        <i onClick={copyTeamComp} className="fa fa-fw fa-clipboard lighten" style={{ fontSize: '1.25em', color: "#99ff99" }} />
+      </span>
+    </div>
+  )
+
+  const enforceIconClass = props.lobby.enforceEvenTeams ? "fa fa-fw fa-toggle-on lighten" : "fa fa-fw fa-toggle-off lighten"
+  const enforceIconColor = props.lobby.enforceEvenTeams ? "#99ff99" : "#ff9999"
+  let enforceEvenToggle = (
+    <div style={{marginBottom: "15px"}}>
+      <span className="card" style={{fontSize: "calc(12px + 1vh)", padding: "5px", backgroundColor: "#282c34", borderRadius: "10px"}}>
+        Enforce even teams:{' '}
+      </span>
+      <span style={{marginTop: "35px"}}>
+        <i onClick={() => props.onEnforceToggle(props.lobby)} className={enforceIconClass} style={{ fontSize: '1.25em', color: enforceIconColor }} />
       </span>
     </div>
   )
@@ -243,7 +282,7 @@ function LobbyView(props) {
         Unfollow:{' '}
       </span>
       <span style={{marginTop: "50px"}}>
-        <i className="fa fa-fw fa-minus-circle lighten" style={{ fontSize: '1.25em', color: "#ff9999" }} />
+        <i onClick={() => props.onUnfollow(props.lobby)} className="fa fa-fw fa-minus-circle lighten" style={{ fontSize: '1.25em', color: "#ff9999" }} />
       </span>
     </div>
   )
@@ -273,6 +312,8 @@ function LobbyView(props) {
     <div className="card" style={{borderRadius: "10px", padding: "10px 20px", marginBottom: "10px", backgroundColor: "#333"}}>
       <h3 className="card" style={{backgroundColor: "#282c34", borderRadius: "10px", marginBottom: "15px", marginTop: "10px", padding: "10px 20px", left: "5px"}}>Commands</h3>
       {matchmakeLoad}
+      {enforceEvenToggle}
+      {teamCompCopy}
       {selectTeam}
     </div>
   )
@@ -290,7 +331,10 @@ function LobbyView(props) {
 return (
     <div style={{marginLeft: "25px", marginRight: "auto"}}>
       <h1 style={{marginTop: "auto", marginBottom: "0px", paddingTop: "0px"}}>{props.lobby.name}</h1>
-      <h6 style={{marginTop: "auto", padding: "0px 25px"}}>id: {props.lobby.id}</h6>
+      <div style={{flexDirection: "row", display: "flex"}}>
+        <h6 style={{marginTop: "auto", paddingLeft: "25px", paddingRight: "5px"}}>id: {props.lobby.id}</h6>
+        <i onClick={() => { navigator.clipboard.writeText(props.lobby.id); toast("copied") }} className="fa fa-fw fa-clipboard lighten" style={{color: "#99ff99" }} />
+      </div>
       {teamView}
     </div>
   )
@@ -314,6 +358,8 @@ interface NavigatorProps {
   lobbies: Map<string, Lobby>;
   selected?: Lobby;
   onSelectLobby: any;
+  onAddNewLobby: any;
+  onFindNewLobby: any;
 }
 
 class Navigator extends React.Component<NavigatorProps, NavigatorState> {
@@ -341,6 +387,9 @@ class Navigator extends React.Component<NavigatorProps, NavigatorState> {
   }
 
   onSearchClick = () => {
+    if (this.state.searchVal) {
+      this.props.onFindNewLobby(this.state.searchVal)
+    }
     this.setState({
       searchVal: ""
     })
@@ -361,6 +410,9 @@ class Navigator extends React.Component<NavigatorProps, NavigatorState> {
   }
 
   onAddClick = () => {
+    if (this.state.addVal) {
+      this.props.onAddNewLobby(this.state.addVal)
+    }
     this.setState({
       addVal: ""
     })
@@ -439,7 +491,7 @@ class App extends React.Component<{}, AppState> {
     const stored = localStorage.getItem("tokenInfo")
     if (stored !== null) {
       const storedJson = JSON.parse(stored)
-      if (storedJson !== undefined) {
+      if (storedJson !== undefined && storedJson.expiration > Date.now()) {
         state.token = storedJson.token
         state.expiration = storedJson.expiration
       }
@@ -487,21 +539,39 @@ class App extends React.Component<{}, AppState> {
   }
 
   onPlayerEditAdd = (lobby) => {
+    const text = lobby.playerEditText
+    const elo = lobby.playerEditNum
+    const existing = lobby.players.get(text)?.elo || 0
+    
     this.setState((prevState) => {
       let nlobbies = deepcopyLobbies(prevState.lobbies)
       let nlobby = nlobbies.get(lobby.id)
       if (!nlobby) {
         return {}
       }
+      
       nlobby.playerEditNum = ""
       nlobby.playerEditText = ""
+
       return {
         lobbies: nlobbies
       }
     })
+
+    if (elo && text) {
+      api('POST', 'player', {"lobby": lobby.id, "player": {"name": text, "elo": parseInt(elo), "existing": existing}}, (e) => {
+        if (e.target.status !== 201) {
+          toast(e.target.response.error)
+          return
+        }
+        this.setSingleLobby(e.target.response)
+      })
+    }
   }
 
   onPlayerEditRemove = (lobby) => {
+    const text = lobby.playerEditText
+
     this.setState((prevState) => {
       let nlobbies = deepcopyLobbies(prevState.lobbies)
       let nlobby = nlobbies.get(lobby.id)
@@ -514,6 +584,16 @@ class App extends React.Component<{}, AppState> {
         lobbies: nlobbies
       }
     })
+
+    if (text) {
+      api('DELETE', 'player', {"lobby": lobby.id, "player": {"name": text}}, (e) => {
+        if (e.target.status !== 202) {
+          toast(e.target.response.error)
+          return
+        }
+        this.setSingleLobby(e.target.response)
+      })
+    }
   }
 
   defaultState = () => {
@@ -575,10 +655,22 @@ class App extends React.Component<{}, AppState> {
     return lobby
   }
 
+  setSingleLobby = (jlobby) => {
+    this.setState((prevState) => {
+      const elobby = prevState.lobbies.get(jlobby.id);
+      const nlobby = this.newLobbyFromExisting(jlobby, elobby ? deepcopyLobby(elobby) : undefined)
+      let nlobbies = deepcopyLobbies(prevState.lobbies)
+      nlobbies.set(nlobby.id, nlobby)
+      return {
+        lobbies: nlobbies
+      }
+    })
+  }
+
   setFromLoad = () => {
     api('GET', 'load', undefined, (e) => {
       if (e.target.status !== 200) {
-        toast("failed to load lobbies")
+        toast(e.target.response.error)
         return
       }
       this.setState((prevState) => {
@@ -654,6 +746,74 @@ class App extends React.Component<{}, AppState> {
     })
   }
 
+  onPlayerLockToggle = (lobby, player) => {
+    this.setState((prevState) => {
+      let nlobbies = deepcopyLobbies(prevState.lobbies)
+      let nlobby = nlobbies.get(lobby.id)
+      if (!nlobby) {
+        return {}
+      }
+      let nplayer = nlobby.players.get(player)
+      if (!nplayer) {
+        return {}
+      }
+
+      nplayer.locked = !nplayer.locked
+      return {
+        lobbies: nlobbies
+      }
+    })
+  }
+
+  onPlayerRaise = (lobby, player) => {
+    this.setState((prevState) => {
+      let nlobbies = deepcopyLobbies(prevState.lobbies)
+      let nlobby = nlobbies.get(lobby.id)
+      if (!nlobby) {
+        return {}
+      }
+      let nplayer = nlobby.players.get(player)
+      if (!nplayer) {
+        return {}
+      }
+
+      const pteam = nplayer?.team
+      const nt = Math.max(...Array.from(nlobby.teams).filter((t) => t < pteam))
+      if (!isFinite(nt)) {
+        return {}
+      }
+
+      nplayer.team = nt
+      return {
+        lobbies: nlobbies
+      }
+    })
+  }
+
+  onPlayerLower = (lobby, player) => {
+    this.setState((prevState) => {
+      let nlobbies = deepcopyLobbies(prevState.lobbies)
+      let nlobby = nlobbies.get(lobby.id)
+      if (!nlobby) {
+        return {}
+      }
+      let nplayer = nlobby.players.get(player)
+      if (!nplayer) {
+        return {}
+      }
+      const pteam = nplayer?.team
+      const nt = Math.min(...Array.from(nlobby.teams).filter((t) => t > pteam))
+      if (!isFinite(nt)) {
+        return {}
+      }
+
+      nplayer.team = nt
+      return {
+        lobbies: nlobbies
+      }
+    })
+  }
+
   onDeleteTeam = (lobby, team) => {
     this.setState((prevState) => {
       let nlobbies = deepcopyLobbies(prevState.lobbies)
@@ -682,10 +842,89 @@ class App extends React.Component<{}, AppState> {
     })
   }
 
+  onEnforceToggle = (lobby) => {
+    this.setState((prevState) => {
+      let nlobbies = deepcopyLobbies(prevState.lobbies)
+      let nlobby = nlobbies.get(lobby.id)
+      if (!nlobby) {
+        return {}
+      }
+      nlobby.enforceEvenTeams = !nlobby.enforceEvenTeams
+      return {
+        lobbies: nlobbies
+      }
+    })
+  }
+
   onSelectLobby = (lobby) => {
-    console.log("hello", lobby.id, lobby.name)
     this.setState({
       selectedLobby: lobby.id
+    })
+  }
+
+  onAddNewLobby = (name) => {
+    api('POST', 'add', {"name": name}, (e) => {
+      if (e.target.status !== 201) {
+        toast(e.target.response.error)
+        return
+      }
+      this.setSingleLobby(e.target.response)
+    })
+  }
+
+  onFindNewLobby = (id) => {
+    api('POST', 'subscribe', {"id": id}, (e) => {
+      if (e.target.status !== 201) {
+        toast(e.target.response.error)
+        return
+      }
+      this.setSingleLobby(e.target.response)
+    })
+  }
+
+  onUnfollow = (lobby) => {
+    api('POST', 'unsubscribe', {"id": lobby.id}, (e) => {
+      if (e.target.status !== 201) {
+        toast(e.target.response.error)
+        return
+      }
+      this.setState((prevState) => {
+        let nlobbies = deepcopyLobbies(prevState.lobbies)
+        nlobbies.delete(lobby.id)
+        return {
+          lobbies: nlobbies
+        }
+      })
+    })
+  }
+
+  matchmake = (lobby) => {
+    const pArr: Array<Player> = Array.from(lobby.players).map((p: any) => p[1])
+    const content = {"id": lobby.id, "teams": Array.from(lobby.teams), "even": lobby.enforceEvenTeams, "players": pArr}
+    api('POST', 'matchmake', content, (e) => {
+      if (e.target.status !== 200) {
+        toast(e.target.response.error)
+        return
+      }
+      this.setState((prevState) => {
+        let nlobbies = deepcopyLobbies(prevState.lobbies)
+        let nlobby = nlobbies.get(lobby.id)
+        if (!nlobby) {
+          toast("could not find lobby for matchmaking")
+          return {}
+        }
+        for (let pin of e.target.response.players) {
+          let nplayer = nlobby.players.get(pin.name)
+          if (!nplayer) {
+            toast("could not find all players for matchmaking")
+            return {}
+          }
+          nplayer.team = pin.team
+        }
+        return {
+          lobbies: nlobbies
+        }
+      })
     })
   }
 
@@ -723,16 +962,24 @@ class App extends React.Component<{}, AppState> {
          <Navigator
            lobbies={this.state.lobbies}
            selected={currentLobby}
+           onAddNewLobby={this.onAddNewLobby}
+           onFindNewLobby={this.onFindNewLobby}
            onSelectLobby={this.onSelectLobby} />
          <LobbyView
             lobby={currentLobby}
             onNewTeam={this.onNewTeam}
             onPlayerToggle={this.onPlayerToggle}
             onSelectTeam={this.onSelectTeam}
+            onPlayerRaise={this.onPlayerRaise}
+            onPlayerLower={this.onPlayerLower}
+            onEnforceToggle={this.onEnforceToggle}
+            onPlayerLockToggle={this.onPlayerLockToggle}
             onPlayerEditAdd={this.onPlayerEditAdd}
             onPlayerEditRemove={this.onPlayerEditRemove}
             onPlayerEditTextChange={this.onPlayerEditTextChange}
             onPlayerEditNumChange={this.onPlayerEditNumChange}
+            matchmake={this.matchmake}
+            onUnfollow={this.onUnfollow}
             onDeleteTeam={this.onDeleteTeam} />
        </div>
       </div>
