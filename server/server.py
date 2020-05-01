@@ -171,8 +171,6 @@ def deletePlayer(user):
 def matchmake():
     solver = pywraplp.Solver('simple_mip_program',
                          pywraplp.Solver.CBC_MIXED_INTEGER_PROGRAMMING)
-    def acc_elo(team):
-        return sum([elos[i][1]*team[i] for i, _ in enumerate(team)])
     
     # Get how many teams to set up
     nteams = len(request.json["teams"])
@@ -181,6 +179,15 @@ def matchmake():
     if not request.json["players"]:
         return jsonify({"error": "no players provided"}), 400
     players = list(filter(lambda x: x["team"] > 0, request.json["players"]))
+
+    if not players:
+        return jsonify({"error": "no players provided"}), 400
+    
+    # Normalize by min elo and add 1 so nobody can be considered useless
+    min_elo = min([p["elo"] for p in players])
+    for p in players:
+        p["elo"] = p["elo"] - min_elo + 1
+
     exclusion_groups = {}
     for player in players:
         if player["locked"]:
@@ -202,6 +209,8 @@ def matchmake():
                 player_mutual_inclusions.append((group_outer[0], elem))
 
     elos = [(player, player["elo"]) for player in players]
+    def acc_elo(team):
+        return sum([elos[i][1]*team[i] for i, _ in enumerate(team)])
 
     # Set up decision variables
     teams = [[] for _ in range(nteams)]
@@ -246,7 +255,7 @@ def matchmake():
                 continue
             solver.Add(acc_elo(team1) >= acc_elo(team0))
     
-    # Minimize distance between team with max elo and team with mine elo
+    # Minimize distance between team with max elo and team with min elo
     solver.Minimize(acc_elo(teams[-1]) - acc_elo(teams[0]))
 
     status = solver.Solve()
@@ -308,7 +317,7 @@ def win(user):
 
     K = 32
     def calc_win_draw_lose(own, other, nplayer):
-        diff = float(own - other)
+        diff = float(other - own)
         perc = 1 / (1 + 10**(diff/400))
         win = int(round( (K * (1 - perc)) / nplayer ))
         draw = int(round( (K * (.5 - perc)) / nplayer ))
