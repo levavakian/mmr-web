@@ -6,7 +6,7 @@ import 'font-awesome/css/font-awesome.min.css';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
-const serverURL: string = process.env.REACT_APP_MMRHOST || "https://mmr-tracker.herokuapp.com/api/"
+const serverURL: string = process.env.REACT_APP_MMRHOST || "https://mmr-tracker.herokuapp.com"
 
 const api = (action: string, route: string, content: any = undefined, onload: any = undefined) => {
   let token = ""
