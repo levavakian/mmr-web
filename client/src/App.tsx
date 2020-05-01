@@ -2,7 +2,7 @@ import React from 'react';
 import './App.css';
 import GoogleLogin, { GoogleLogout } from 'react-google-login';
 import '@trendmicro/react-sidenav/dist/react-sidenav.css';
-import 'font-awesome/css/font-awesome.css';
+import 'font-awesome/css/font-awesome.min.css';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
