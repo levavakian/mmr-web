@@ -6,8 +6,36 @@ from flask_cors import CORS
 from flask_talisman import Talisman
 from uuid import uuid1
 from ortools.linear_solver import pywraplp
+import os
+import pymongo
 
 CLIENT_ID="360927771611-5re4vbbs7ba6envdordshh9fnj31uldf.apps.googleusercontent.com"
+MONGODB_URI=os.getenv("MONGODB_URI", "mongodb://localhost:27017/")
+
+mongoc = pymongo.MongoClient(MONGODB_URI)
+mongodb = mongoc["mmrweb"]
+mongolobbies = mongodb["lobbies"]
+mongousers = mongodb["users"]
+
+def set_lobby(lobby):
+    lobby["_id"] = lobby["id"]
+    mongolobbies.replace_one({"_id": lobby["id"]}, lobby, upsert=True)
+
+def get_lobby(lobby_id):
+    return mongolobbies.find_one({"_id": lobby_id})
+
+def get_lobbies(lobby_ids):
+    return [mongolobbies.find_one({"_id": lid}) for lid in lobby_ids]
+
+def get_user(user):
+    tmp = mongousers.find_one({"_id": user})
+    if tmp is None:
+        set_user(user, [])
+        tmp = mongousers.find_one({"_id": user})
+    return tmp
+
+def set_user(user, lobby_ids):
+    return mongousers.replace_one({"_id": user}, {"_id": user, "lobbies": lobby_ids}, upsert=True)
 
 app = Flask(__name__, static_url_path='',
             static_folder='../client/build',
@@ -42,13 +70,10 @@ def entrypoint():
 @app.route("/api/load")
 @require_api_token
 def load(user):
-    if user not in global_user_to_lobbies:
-        global_user_to_lobbies[user] = []
-    lobby_ids = global_user_to_lobbies[user]
-    lobbies = []
-    for lobby_id in lobby_ids:
-        if lobby_id in global_lobbies:
-            lobbies.append(global_lobbies[lobby_id])
+    muser = get_user(user)
+    lobby_ids = muser["lobbies"]
+    lobbies = get_lobbies(muser["lobbies"])
+    lobbies = [l for l in lobbies if l is not None]
     return jsonify({"lobbies": lobbies})
 
 @app.route("/api/add", methods=['POST'])
@@ -57,42 +82,47 @@ def add(user):
     if "name" not in request.json:
         return jsonify({"error": "No name given for lobby"}), 400
     uid = str(uuid1())
-    global_lobbies[uid] = {"name": request.json["name"], "id": uid, "players": []}
-    if user not in global_user_to_lobbies:
-        global_user_to_lobbies[user] = []
-    global_user_to_lobbies[user].append(uid)
-    return jsonify(global_lobbies[uid]), 201
+    set_lobby({"name": request.json["name"], "id": uid, "players": []})
+    lobbies = get_user(user)["lobbies"]
+    lobbies.append(uid)
+    set_user(user, lobbies)
+    return jsonify(get_lobby(uid)), 201
 
 @app.route("/api/subscribe", methods=['POST'])
 @require_api_token
 def subscribe(user):
     if "id" not in request.json:
         return jsonify({"error": "No name given for lobby"}), 400
-    if request.json["id"] not in global_lobbies:
+    lobby = get_lobby(request.json["id"])
+    if lobby is None:
         return jsonify({"error": "No lobby with given id exists"}), 400
-    if user not in global_user_to_lobbies:
-        global_user_to_lobbies[user] = []
-    global_user_to_lobbies[user].append(request.json["id"])
-    return jsonify(global_lobbies[request.json["id"]]), 201
+    lobbies = get_user(user)["lobbies"]
+    lobbies.append(request.json["id"])
+    set_user(user, lobbies)
+    return lobby, 201
 
 @app.route("/api/unsubscribe", methods=['POST'])
 @require_api_token
 def unsubscribe(user):
     if "id" not in request.json:
         return jsonify({"error": "No name given for lobby"}), 400
-    if request.json["id"] not in global_lobbies:
+    
+    if get_lobby(request.json["id"]) is None:
         return jsonify({"error": "No lobby with given id exists"}), 400
-    if user not in global_user_to_lobbies:
-        global_user_to_lobbies[user] = []
-    global_user_to_lobbies[user] = list(filter(lambda x: x != request.json["id"], global_user_to_lobbies[user]))
-    return jsonify(global_lobbies[request.json["id"]]), 201
+    
+    lobbies = get_user(user)["lobbies"]
+    lobbies = [l for l in lobbies if l != request.json["id"]]
+    set_user(user, lobbies)
+    return jsonify({}), 201
 
 @app.route("/api/player", methods=['POST', 'PUT', 'PATCH'])
 @require_api_token
 def modifyPlayer(user):
     if "lobby" not in request.json:
         return jsonify({"error": "No id given for lobby"}), 400
-    if request.json["lobby"] not in global_lobbies:
+    
+    lobby = get_lobby(request.json["lobby"])
+    if lobby is None:
         return jsonify({"error": "No lobby with given id exists"}), 400
     if "player" not in request.json:
         return jsonify({"error": "No player"}), 400
@@ -107,7 +137,6 @@ def modifyPlayer(user):
     if not isinstance(request.json["player"]["existing"], int):
         return jsonify({"error": "elo was not an int"}), 400
 
-    lobby = global_lobbies[request.json["lobby"]]
     req_player = request.json["player"]
     player = next((p for p in lobby["players"] if p["name"] == req_player["name"]), None)
     if player is None:
@@ -116,25 +145,27 @@ def modifyPlayer(user):
         if player["elo"] != req_player["existing"]:
             return jsonify({"error": "existing elo stale, please refresh"}), 400
         player["elo"] = req_player["elo"]
-    return jsonify(global_lobbies[request.json["lobby"]]), 201
+    set_lobby(lobby)
+    return jsonify(lobby), 201
 
 @app.route("/api/player", methods=['DELETE'])
 @require_api_token
 def deletePlayer(user):
     if "lobby" not in request.json:
         return jsonify({"error": "No id given for lobby"}), 400
-    if request.json["lobby"] not in global_lobbies:
+ 
+    lobby = get_lobby(request.json["lobby"])
+    if lobby is None:
         return jsonify({"error": "No lobby with given id exists"}), 400
     if "player" not in request.json:
         return jsonify({"error": "No player"}), 400
     if "name" not in request.json["player"]:
         return jsonify({"error": "No name given for player"}), 400
 
-    lobby = global_lobbies[request.json["lobby"]]
     req_player = request.json["player"]
     lobby["players"] = list(filter(lambda x: x["name"] != req_player["name"], lobby["players"]))
-
-    return jsonify(global_lobbies[request.json["lobby"]]), 202
+    set_lobby(lobby)
+    return jsonify(lobby), 202
 
 @app.route("/api/matchmake", methods=['POST'])
 def matchmake():
@@ -149,7 +180,6 @@ def matchmake():
     # Filter out players with no team, set up locked in groups
     if not request.json["players"]:
         return jsonify({"error": "no players provided"}), 400
-    print (request.json["players"])
     players = list(filter(lambda x: x["team"] > 0, request.json["players"]))
     exclusion_groups = {}
     for player in players:
@@ -251,9 +281,9 @@ def matchmake():
 @app.route("/api/win", methods=['POST'])
 @require_api_token
 def win(user):
-    if request.json["id"] not in global_lobbies:
+    lobby = get_lobby(request.json["id"])
+    if lobby is None:
         return jsonify({"error": "no lobby found"}), 400
-    lobby = global_lobbies[request.json["id"]]
     existing_players = lobby["players"]
     players = request.json["players"]
     team_combined_elos = {}
@@ -285,7 +315,6 @@ def win(user):
         lose = int(round( (K * (0 - perc)) / nplayer ))
         return (win, draw, lose)
     
-    print(request.json["winner"])
     if teams[0] == request.json["winner"]:
         team0diff = calc_win_draw_lose(team_combined_elos[teams[0]], team_combined_elos[teams[1]], team_num_players[teams[0]])[0]
     else:
@@ -308,4 +337,5 @@ def win(user):
         existing_player = next((p for p in existing_players if p["name"] == player["name"]), None)
         existing_player["elo"] = existing_player["elo"] + team1diff
 
-    return jsonify(global_lobbies[request.json["id"]]), 200
+    set_lobby(lobby)
+    return jsonify(lobby), 200
