@@ -6,6 +6,8 @@ import 'font-awesome/css/font-awesome.css';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
+const serverURL: string = process.env.REACT_APP_MMRHOST || "https://mmr-tracker.herokuapp.com/api/"
+
 const api = (action: string, route: string, content: any = undefined, onload: any = undefined) => {
   let token = ""
   const stored = localStorage.getItem("tokenInfo")
@@ -21,8 +23,8 @@ const api = (action: string, route: string, content: any = undefined, onload: an
   if (onload) {
     xhr.addEventListener('load', onload)
   }
-  xhr.addEventListener('error', () => toast("there was an error with the request"))
-  xhr.open(action, "http://localhost:5000/api/" + route)
+  xhr.addEventListener('error', () => toast("there was an error with the request, are you logged in?"))
+  xhr.open(action, serverURL + "/api/" + route)
   xhr.setRequestHeader("Authorization", "Bearer " + token);
   xhr.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
   if (content) {
@@ -271,7 +273,7 @@ function LobbyView(props) {
           )
         })}
       <div>
-        <i className="fa fa-fw fa-angle-double-right lighten" style={{fontSize: '1.75em', color: "#99ff99" }} />
+        <i onClick={() => {props.onSendWinner(props.lobby)}} className="fa fa-fw fa-angle-double-right lighten" style={{fontSize: '1.75em', color: "#99ff99" }} />
       </div>
     </div>
   )
@@ -632,25 +634,26 @@ class App extends React.Component<{}, AppState> {
   }
 
   newLobbyFromExisting = (jlobby, elobby) => {
-    let players = jlobby.players.map((p) => {
+    let players = new Map<string, Player>(jlobby.players.map((p) => {
       let player = new Player(p.name, p.elo)
       if (elobby) {
         const existing = elobby.players.get(p.name)
         if (!existing)
         {
-          return player
+          return [player.name, player]
         }
         player.locked = existing.locked
         player.team = existing.team
       }
-      return player
-    })
+      return [player.name, player]
+    }))
     let lobby = new Lobby(jlobby.id, jlobby.name, players)
     if (elobby) {
       lobby.teams = elobby.teams
       lobby.playerEditNum = elobby.playerEditNum
       lobby.playerEditText = elobby.playerEditText
       lobby.chosenTeam = elobby.chosenTeam
+      lobby.enforceEvenTeams = elobby.enforceEvenTeams
     }
     return lobby
   }
@@ -740,6 +743,7 @@ class App extends React.Component<{}, AppState> {
       }
 
       nplayer.team = nTeam
+
       return {
         lobbies: nlobbies
       }
@@ -899,7 +903,8 @@ class App extends React.Component<{}, AppState> {
   }
 
   matchmake = (lobby) => {
-    const pArr: Array<Player> = Array.from(lobby.players).map((p: any) => p[1])
+    let pArr: Array<Player> = Array.from(lobby.players).map((p: any) => p[1])
+    pArr = pArr.filter((p: any) => p !== null)
     const content = {"id": lobby.id, "teams": Array.from(lobby.teams), "even": lobby.enforceEvenTeams, "players": pArr}
     api('POST', 'matchmake', content, (e) => {
       if (e.target.status !== 200) {
@@ -926,6 +931,31 @@ class App extends React.Component<{}, AppState> {
         }
       })
     })
+  }
+
+  onSendWinner = (lobby) => {
+    const pArr: Array<Player> = Array.from(lobby.players).map((p: any) => p[1])
+    const content = {"id": lobby.id, "players": pArr, "winner": lobby.chosenTeam}
+    this.setState((prevState) => {
+      let nlobbies = deepcopyLobbies(prevState.lobbies)
+      let nlobby = nlobbies.get(lobby.id)
+      if (!nlobby) {
+        toast("could not find lobby for matchmaking")
+        return {}
+      }
+      nlobby.chosenTeam = 0
+      return {
+        lobbies: nlobbies
+      }
+    })
+    api('POST', 'win', content, (e) => {
+      if (e.target.status !== 200) {
+        toast(e.target.response.error)
+        return
+      }
+      this.setSingleLobby(e.target.response)
+    })
+
   }
 
   render() {
@@ -978,6 +1008,7 @@ class App extends React.Component<{}, AppState> {
             onPlayerEditRemove={this.onPlayerEditRemove}
             onPlayerEditTextChange={this.onPlayerEditTextChange}
             onPlayerEditNumChange={this.onPlayerEditNumChange}
+            onSendWinner={this.onSendWinner}
             matchmake={this.matchmake}
             onUnfollow={this.onUnfollow}
             onDeleteTeam={this.onDeleteTeam} />

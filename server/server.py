@@ -147,6 +147,9 @@ def matchmake():
     nteams = len(request.json["teams"])
 
     # Filter out players with no team, set up locked in groups
+    if not request.json["players"]:
+        return jsonify({"error": "no players provided"}), 400
+    print (request.json["players"])
     players = list(filter(lambda x: x["team"] > 0, request.json["players"]))
     exclusion_groups = {}
     for player in players:
@@ -180,7 +183,6 @@ def matchmake():
     # A team needs at least one player
     for team in teams:
         solver.Add(sum(team) >= 1)
-        solver.Add(acc_elo(team) >= 0)
     
     # Any one player can only be on one team
     for pidx in range(len(elos)):
@@ -221,7 +223,6 @@ def matchmake():
     if status == pywraplp.Solver.OPTIMAL:
         # Set up the team ordering so that locked players stay in their teams
         tarr_no_order = set(request.json["teams"])
-        print(tarr_no_order)
         tarr = [0]*nteams
         for idx, team in enumerate(teams):
             for pidx, p in enumerate(team):
@@ -246,3 +247,65 @@ def matchmake():
         return jsonify({"players": res}), 200
     else:
         return jsonify({"error": "solution does not exist"}), 400
+
+@app.route("/api/win", methods=['POST'])
+@require_api_token
+def win(user):
+    if request.json["id"] not in global_lobbies:
+        return jsonify({"error": "no lobby found"}), 400
+    lobby = global_lobbies[request.json["id"]]
+    existing_players = lobby["players"]
+    players = request.json["players"]
+    team_combined_elos = {}
+    team_num_players = {}
+    for player in players:
+        if player["team"] == 0:
+            continue
+        existing_player = next((p for p in existing_players if p["name"] == player["name"]), None)
+        if existing_player is None or player["elo"] != existing_player["elo"]:
+            return jsonify({"error": "players stale, did not update elos, please refresh"}), 400
+        if player["team"] not in team_combined_elos:
+            team_combined_elos[player["team"]] = 0
+            team_num_players[player["team"]] = 0
+        team_combined_elos[player["team"]] = team_combined_elos[player["team"]] + player["elo"]
+        team_num_players[player["team"]] = team_num_players[player["team"]] + 1
+    if len(team_combined_elos) != 2:
+        return jsonify({"error": "elo updates only supported for two team matchups"}), 400
+    
+    teams = list(team_combined_elos.keys())
+    if request.json["winner"] not in teams:
+        return jsonify({"error": "invalid winning team"})
+
+    K = 32
+    def calc_win_draw_lose(own, other, nplayer):
+        diff = float(own - other)
+        perc = 1 / (1 + 10**(diff/400))
+        win = int(round( (K * (1 - perc)) / nplayer ))
+        draw = int(round( (K * (.5 - perc)) / nplayer ))
+        lose = int(round( (K * (0 - perc)) / nplayer ))
+        return (win, draw, lose)
+    
+    print(request.json["winner"])
+    if teams[0] == request.json["winner"]:
+        team0diff = calc_win_draw_lose(team_combined_elos[teams[0]], team_combined_elos[teams[1]], team_num_players[teams[0]])[0]
+    else:
+        team0diff = calc_win_draw_lose(team_combined_elos[teams[0]], team_combined_elos[teams[1]], team_num_players[teams[0]])[2]
+    
+    for player in players:
+        if player["team"] != teams[0]:
+            continue
+        existing_player = next((p for p in existing_players if p["name"] == player["name"]), None)
+        existing_player["elo"] = existing_player["elo"] + team0diff
+    
+    if teams[1] == request.json["winner"]:
+        team1diff = calc_win_draw_lose(team_combined_elos[teams[1]], team_combined_elos[teams[0]], team_num_players[teams[1]])[0]
+    else:
+        team1diff = calc_win_draw_lose(team_combined_elos[teams[1]], team_combined_elos[teams[0]], team_num_players[teams[1]])[2]
+    
+    for player in players:
+        if player["team"] != teams[1]:
+            continue
+        existing_player = next((p for p in existing_players if p["name"] == player["name"]), None)
+        existing_player["elo"] = existing_player["elo"] + team1diff
+
+    return jsonify(global_lobbies[request.json["id"]]), 200

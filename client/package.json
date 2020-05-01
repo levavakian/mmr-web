@@ -23,8 +23,8 @@
   },
   "scripts": {
     "start": "react-scripts start",
-    "dev": "MMRHOST=http://localhost:80 react-scripts start",
-    "prod": "MMRHOST=https://mmr-tracker.herokuapp.com react-scripts start",
+    "dev": "REACT_APP_MMRHOST=http://localhost:5000 npm start",
+    "prod": "REACT_APP_MMRHOST=https://mmr-tracker.herokuapp.com npm start",
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
