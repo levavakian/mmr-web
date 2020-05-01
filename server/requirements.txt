@@ -4,3 +4,4 @@ gunicorn
 requests
 flask-cors
 ortools
+google-auth
