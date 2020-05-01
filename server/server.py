@@ -31,7 +31,7 @@ def require_api_token(func):
                 raise ValueError('Wrong issuer.')
         except ValueError as e:
             # If it isn't return our access denied message (you can also return a redirect or render_template)
-            return Response(str(e)), 401
+            return jsonify({"error": "please login"}), 401
         return func(*args, **kwargs, user=idinfo["email"])
     return check_token
 
