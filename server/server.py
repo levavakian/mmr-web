@@ -16,6 +16,7 @@ MONGODB_DB=os.getenv("MONGODB_DB", "mmrweb")
 mongoc = pymongo.MongoClient(MONGODB_URI, retryWrites=False)
 mongodb = mongoc[MONGODB_DB]
 mongolobbies = mongodb["lobbies"]
+mongoproposals = mongodb["proposals"]
 mongousers = mongodb["users"]
 
 def set_lobby(lobby):
@@ -27,6 +28,13 @@ def get_lobby(lobby_id):
 
 def get_lobbies(lobby_ids):
     return [mongolobbies.find_one({"_id": lid}) for lid in lobby_ids]
+
+def get_proposal(lobby_id):
+    return mongoproposals.find_one({"_id": lobby_id})
+
+def set_proposal(layout):
+    layout["_id"] = layout["id"]
+    mongoproposals.replace_one({"_id": layout["id"]}, layout, upsert=True)
 
 def get_user(user):
     tmp = mongousers.find_one({"_id": user})
@@ -183,11 +191,6 @@ def matchmake():
 
     if not players:
         return jsonify({"error": "no players provided"}), 400
-    
-    # Normalize by min elo and add 1 so nobody can be considered useless
-    min_elo = min([p["elo"] for p in players])
-    for p in players:
-        p["elo"] = p["elo"] - min_elo + 1
 
     exclusion_groups = {}
     for player in players:
@@ -287,6 +290,24 @@ def matchmake():
         return jsonify({"players": res}), 200
     else:
         return jsonify({"error": "solution does not exist"}), 400
+
+@app.route("/api/propose", methods=['POST'])
+@require_api_token
+def propose(user):
+    uid = request.json["id"]
+    proposal = request.json
+    proposal["id"] = uid
+    set_proposal(proposal)
+    return jsonify({}), 201
+
+@app.route("/api/retrieve", methods=['POST'])
+@require_api_token
+def retrieve(user):
+    uid = request.json["id"]
+    proposal = get_proposal(uid)
+    if not proposal:
+        return jsonify({"error": "no such a proposal"}), 404
+    return jsonify(proposal), 200
 
 @app.route("/api/win", methods=['POST'])
 @require_api_token

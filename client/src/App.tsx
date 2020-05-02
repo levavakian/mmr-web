@@ -227,10 +227,11 @@ function LobbyView(props) {
     for (const t of props.lobby.teams) {
       const playersForTeam = pArr.filter((p) => p.team === t)
       const totElo = playersForTeam.map((p) => p.elo).reduce((tot, add) => tot + add, 0)
-      out = out + "Team " + t + "(" + totElo + ")\n"
+      out = out + "Team " + t + "(" + totElo + "): "
       for (let p of playersForTeam) {
-        out = out + "  " + p.name + " (" + p.elo + ")\n"
+        out = out + "  " + p.name + " (" + p.elo + ") "
       }
+      out = out + "\n"
     }
     navigator.clipboard.writeText(out)
     toast("copied")
@@ -242,6 +243,20 @@ function LobbyView(props) {
       </span>
       <span style={{marginTop: "35px"}}>
         <i onClick={copyTeamComp} className="fa fa-fw fa-clipboard lighten" style={{ fontSize: '1.25em', color: "#99ff99" }} />
+      </span>
+    </div>
+  )
+
+  let teamCompSelect = (
+    <div style={{marginBottom: "15px"}}>
+      <span className="card" style={{fontSize: "calc(12px + 1vh)", padding: "5px", backgroundColor: "#282c34", borderRadius: "10px"}}>
+        Team proposals:{' '}
+      </span>
+      <span onClick={() => props.onPropose(props.lobby)} className="card lighten" style={{fontSize: "calc(12px + 1vh)", padding: "5px", backgroundColor: "#282c34", marginLeft: "5px", borderRadius: "10px"}}>
+        Propose
+      </span>
+      <span onClick={() => props.onRetrieve(props.lobby)} className="card lighten" style={{fontSize: "calc(12px + 1vh)", padding: "5px", backgroundColor: "#282c34", marginLeft: "5px", borderRadius: "10px"}}>
+        Retrieve
       </span>
     </div>
   )
@@ -316,6 +331,7 @@ function LobbyView(props) {
       {matchmakeLoad}
       {enforceEvenToggle}
       {teamCompCopy}
+      {teamCompSelect}
       {selectTeam}
     </div>
   )
@@ -955,7 +971,48 @@ class App extends React.Component<{}, AppState> {
       }
       this.setSingleLobby(e.target.response)
     })
+  }
 
+  onPropose = (lobby) => {
+    const pArr: Array<Player> = Array.from(lobby.players).map((p: any) => p[1])
+    const tArr: Array<number> = Array.from(lobby.teams).map((p: any) => p)
+    const content = {"id": lobby.id, "players": pArr, "teams": tArr}
+    api('POST', 'propose', content, (e) => {
+      if (e.target.status !== 201) {
+        toast(e.target.response.error)
+      }
+    })
+  }
+
+  onRetrieve = (lobby) => {
+    api('POST', 'retrieve', {"id": lobby.id}, (e) => {
+      if (e.target.status !== 200) {
+        toast(e.target.response.error)
+      }
+
+      this.setState((prevState) => {
+        let nlobbies = deepcopyLobbies(prevState.lobbies)
+        let nlobby = nlobbies.get(lobby.id)
+        if (!nlobby) {
+          toast("could not find lobby for matchmaking")
+          return {}
+        }
+
+        nlobby.teams = new Set(e.target.response.teams)
+        nlobby.players.forEach((p) => {
+          for (let pr of e.target.response.players) {
+            if (pr.name === p.name)
+            {
+              p.team = pr.team
+              return
+            }
+          }
+        })
+        return {
+          lobbies: nlobbies
+        }
+      })
+    })
   }
 
   render() {
@@ -1008,6 +1065,8 @@ class App extends React.Component<{}, AppState> {
             onPlayerEditRemove={this.onPlayerEditRemove}
             onPlayerEditTextChange={this.onPlayerEditTextChange}
             onPlayerEditNumChange={this.onPlayerEditNumChange}
+            onPropose={this.onPropose}
+            onRetrieve={this.onRetrieve}
             onSendWinner={this.onSendWinner}
             matchmake={this.matchmake}
             onUnfollow={this.onUnfollow}
