@@ -53,6 +53,8 @@ class Player {
 class Lobby {
   teams: Set<number>
   chosenTeam: number = 0
+  KFactor: number = 32
+  kFactorVal: string = ""
   id: string
   name: string
   players: Map<string, Player>
@@ -99,6 +101,7 @@ const deepcopyLobby = (lobby: Lobby) => {
   nlobby.playerEditNum = lobby.playerEditNum
   nlobby.playerEditText = lobby.playerEditText
   nlobby.enforceEvenTeams = lobby.enforceEvenTeams
+  nlobby.KFactor = lobby.KFactor
   return nlobby
 }
 
@@ -317,10 +320,20 @@ function LobbyView(props) {
     </div>
   )
 
+  let kFactorView = (
+    <div style={{display: "flex", flexDirection: "row"}}>
+      <span className="card" style={{fontSize: "calc(12px + 1vh)", marginRight: "10px", marginBottom: "20px", padding: "5px", backgroundColor: "#282c34", borderRadius: "10px"}}>
+        Current K-Factor [{props.lobby.KFactor}]{' '}
+      </span>
+      {inputForm("Set K-Factor", "text", props.lobby.kFactorVal, "200px", (e) => props.onKFactorEdit(props.lobby, e), (e) => props.onKFactorSubmit(props.lobby, e))}
+    </div>
+  )
+
   let settingsView = (
     <div className="card" style={{borderRadius: "10px", padding: "10px 20px", backgroundColor: "#333"}}>
       <h3 className="card" style={{backgroundColor: "#282c34", borderRadius: "10px", marginBottom: "15px", marginTop: "10px", padding: "10px 20px", left: "5px"}}>Settings</h3>
       {playerActions}
+      {kFactorView}
       {unfollowView}
     </div>
   )
@@ -556,6 +569,49 @@ class App extends React.Component<{}, AppState> {
     })
   }
 
+  onKFactorSubmit = (lobby, e) => {
+    const kfac = lobby.kFactorVal
+    if (e.which === 13) {
+      e.preventDefault();
+      this.setState((prevState) => {
+        let nlobbies = deepcopyLobbies(prevState.lobbies)
+        let nlobby = nlobbies.get(lobby.id)
+        if (!nlobby) {
+          return {}
+        }
+        nlobby.kFactorVal = ""
+        return {
+          lobbies: nlobbies
+        }
+      })
+
+      if (kfac) {
+        api('POST', 'setk', {"id": lobby.id, "KFactor": kfac}, (e) => {
+          if (e.target.status !== 201) {
+            toast(e.target.response.error)
+            return
+          }
+          this.setSingleLobby(e.target.response)
+        })
+      }
+    }
+  }
+
+  onKFactorEdit = (lobby, event) => {
+    const val = event.target.value
+    this.setState((prevState) => {
+      let nlobbies = deepcopyLobbies(prevState.lobbies)
+      let nlobby = nlobbies.get(lobby.id)
+      if (!nlobby) {
+        return {}
+      }
+      nlobby.kFactorVal = val
+      return {
+        lobbies: nlobbies
+      }
+    })
+  }
+
   onPlayerEditAdd = (lobby) => {
     const text = lobby.playerEditText
     const elo = lobby.playerEditNum
@@ -664,6 +720,7 @@ class App extends React.Component<{}, AppState> {
       return [player.name, player]
     }))
     let lobby = new Lobby(jlobby.id, jlobby.name, players)
+    lobby.KFactor = parseInt(jlobby.KFactor)
     if (elobby) {
       lobby.teams = elobby.teams
       lobby.playerEditNum = elobby.playerEditNum
@@ -1062,11 +1119,13 @@ class App extends React.Component<{}, AppState> {
             onEnforceToggle={this.onEnforceToggle}
             onPlayerLockToggle={this.onPlayerLockToggle}
             onPlayerEditAdd={this.onPlayerEditAdd}
+            onKFactorEdit={this.onKFactorEdit}
             onPlayerEditRemove={this.onPlayerEditRemove}
             onPlayerEditTextChange={this.onPlayerEditTextChange}
             onPlayerEditNumChange={this.onPlayerEditNumChange}
             onPropose={this.onPropose}
             onRetrieve={this.onRetrieve}
+            onKFactorSubmit={this.onKFactorSubmit}
             onSendWinner={this.onSendWinner}
             matchmake={this.matchmake}
             onUnfollow={this.onUnfollow}

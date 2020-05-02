@@ -309,6 +309,16 @@ def retrieve(user):
         return jsonify({"error": "no such a proposal"}), 404
     return jsonify(proposal), 200
 
+@app.route("/api/setk", methods=['POST'])
+@require_api_token
+def setk(user):
+    uid = request.json["id"]
+    kFactor = request.json["KFactor"]
+    lobby = get_lobby(uid)
+    lobby["KFactor"] = kFactor
+    set_lobby(lobby)
+    return jsonify(lobby), 201
+
 @app.route("/api/win", methods=['POST'])
 @require_api_token
 def win(user):
@@ -337,7 +347,7 @@ def win(user):
     if request.json["winner"] not in teams:
         return jsonify({"error": "invalid winning team"})
 
-    K = 32
+    K = float(lobby["KFactor"])
     def calc_win_draw_lose(own, other, nplayer):
         diff = float(other - own)
         perc = 1 / (1 + 10**(diff/400))
