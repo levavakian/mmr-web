@@ -10,8 +10,8 @@ import os
 import pymongo
 
 CLIENT_ID="360927771611-5re4vbbs7ba6envdordshh9fnj31uldf.apps.googleusercontent.com"
-MONGODB_URI=os.getenv("MONGODB_URI", "mongodb://localhost:27017/")
-MONGODB_DB=os.getenv("MONGODB_DB", "mmrweb")
+MONGODB_URI=os.getenv("ATLAS_URI", "mongodb://localhost:27017/")
+MONGODB_DB=os.getenv("ATLAS_DB", "mmrweb")
 
 mongoc = pymongo.MongoClient(MONGODB_URI, retryWrites=False)
 mongodb = mongoc[MONGODB_DB]
